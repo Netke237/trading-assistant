@@ -59,3 +59,15 @@ No completed application feature, independent code audit, green integrated suite
 - Coordinator check after adding the `finally`, native Node 22.23.2 with `--maxWorkers=2`: ten suites **185 passed / 1 failed (B7 only)**, 235 s. `npm run typecheck` was clean. This is a focused subset and does not close the full-frontend gate.
 - Plan round 3 (stage 3/3): fresh `gate-auditor` `tuner_plan_amendment_audit_3` on SHA256 `e0adace9657c3701df35ba41eee9ad41d86330b412d882e3997935103bda6af6`, **0 gate findings**. Record: `plan-amendment-audit-3.md`. The plan stage is at its cap and clean. Code stage: 0 rounds, `audit_clean: false`.
 - Still to do: the container ten-suite and full frontend Jest runs (`--maxWorkers=2`), the T2a commit, T2 tests, T3, and T4 (merge `origin/main`, integrated checks, code audit, PR).
+
+## T2a #647 built and verified — 2026-11-16
+
+- Coordinator, Node 20.20.2 glibc container (`ta-frontend-test:tuner638-node20-glibc`, 4 cores, `--maxWorkers=2`, default limits, no network), ten suites:
+  - run 1: **184/186**, failures B7 and one transient timeout in `submission-review` "shows the actual execution inputs once…";
+  - run 2: **185/186**, B7 only.
+  That test run alone took 2133 ms. The transient is recorded here and was not explained away. It did not recur in either full run below.
+- Fresh implementer committed `296ac66e test(frontend): scope trade-card queries to their semantic sections`. It changes exactly the 11 permitted files, and the coordinator checked the list with `git show --stat`. The implementer made no further code changes. Typecheck is clean.
+- Full frontend Jest in the same container with `--maxWorkers=2`:
+  - Run A, snapshot of `frontend/` only: 344/347 suites, 6353/6359 tests, 728 s. Besides B7, the failures were `optionsSearchProfilesRecalibration` (5 tests) and `strikeFormatGolden`, which failed to run with ENOENT on `/repo/backend/tests/fixtures/strike_format_golden.json`. Both suites read tracked files outside `frontend/` (`docs/search-profiles/search-profiles-export.json`, `backend/tests/fixtures/strike_format_golden.json`), and the helper's snapshot leaves them out. The failures come from the harness, not the code.
+  - Run B: the only change is that the helper's `git archive` also includes those two tracked paths from HEAD. Result: **346/347 suites, 6378/6379 tests, 700 s; the only failure is B7.** This meets amendment 2026-11-16 item 3.
+- B7 stays red until main carries its date fix, and must pass after Task 4 merges `origin/main`. Task 2 (#640) can close only after its own required checks pass. Task 3, Task 4 and the code audit are still pending. Phase completion stays at 20 %, because the build milestone needs all build units. Code stage: 0 rounds, `audit_clean: false`.
