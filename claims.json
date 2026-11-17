@@ -2,11 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/j1-tuning-run-0f281a",
-      "claimed_at": "2026-11-17T05:24:56Z",
-      "expires_at": "2026-11-17T09:34:36Z",
-      "note": "J1 run per runbook (approved; task scheduling)",
-      "task": "KENNETH-J1-TUNING-RUN"
+      "branch": "board/portfolio-numbers-3b6830e9",
+      "claimed_at": "2026-11-17T19:01:31Z",
+      "expires_at": "2026-11-17T22:01:31Z",
+      "note": "Board #657 portfolio numbers",
+      "task": "PORTFOLIO-NUMBERS"
     }
   ]
 }
