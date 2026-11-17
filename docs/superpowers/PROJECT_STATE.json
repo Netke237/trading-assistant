@@ -11237,11 +11237,11 @@
       "branch": "board/portfolio-quote-gaps-8c0ac135",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 10,
+      "completion_pct": 20,
       "plan": "docs/superpowers/plans/2026-11-17-portfolio-quote-gaps-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
-      "plan_audit_clean": false,
+      "plan_audit_clean": true,
       "verify": {
         "kind": "present",
         "path": "backend/app/routers/portfolio.py",
@@ -11253,7 +11253,30 @@
         "Q2 (2026-11-17, #658): snapshot policy on a day with an unquoted row -- (a) keep skipping [recommended], (b) write from quoted rows + unquoted_count column, (c) last known mark + flag. Until answered: (a) as today; this phase changes no snapshot write.",
         "Q3 (2026-11-17, #658, FYI): skipped-contract record is process-local (no migration)."
       ],
-      "note": "2026-11-17 taken on Kenneth's instruction (board item #658, not yet in the Queue). Root cause recorded on #658: pre-EXACT-STRIKE ids truncated strikes; EXACT-STRIKE (PR #512, 2026-10-22) matches exactly, so BMY|67 (really the 67.5 call) has no quote and NLQ-1 has skipped every snapshot since 2026-10-23. No market.py change. Plan drafted; plan audit pending."
+      "note": "2026-11-17 taken on Kenneth's instruction (board item #658, not yet in the Queue). Root cause recorded on #658: pre-EXACT-STRIKE ids truncated strikes; EXACT-STRIKE (PR #512, 2026-10-22) matches exactly, so BMY|67 (really the 67.5 call) has no quote and NLQ-1 has skipped every snapshot since 2026-10-23. No market.py change. Plan drafted; plan audit pending. 2026-11-17 plan round 1 CLEAN (0 gate findings); plan stage closed. Test 6 amended test-only afterwards.",
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "portfolio_quote_gaps_plan_audit_1 (fresh gate-auditor, bmad-review-adversarial-general)",
+        "reviewed_commit": "7ea36d08",
+        "plan_sha256_after_amendment": "b5962e5f9f1a58ee51d171c718f5b01d23bf645ba489326c17d937553a16bfe7"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "portfolio_quote_gaps_plan_audit_1",
+          "scope": "whole plan at 7ea36d08 vs routers/portfolio.py, schemas PerformanceResponse, market.py quote path, test helpers, git history of 34b00b37^1",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "below_gate_noted": "Test 6 seeded a duplicate contract that the unique constraint on portfolio_positions.contract rejects; amended test-only (no behaviour change) after the round."
+        }
+      ]
     }
   ],
   "already_shipped": [

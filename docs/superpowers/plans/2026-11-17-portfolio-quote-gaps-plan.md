@@ -104,9 +104,11 @@ resets the record first (autouse fixture in the new section:
    all-quoted read → `snapshotSkippedOn is None`, `[]`, `lastSnapshotDate == today`.
 5. `test_performance_snapshot_skip_after_a_write_same_day` — all-quoted read, then a skip
    read → `lastSnapshotDate == today` and `snapshotSkippedOn == today` with the contract.
-6. `test_performance_snapshot_skip_lists_every_unquoted_contract_once` — both legs
-   unquoted, plus a third row duplicating the option contract → the list is the two ids,
-   de-duplicated, in `GET /api/portfolio` order.
+6. `test_performance_snapshot_skip_lists_every_unquoted_contract` — both legs of
+   `_seed_two` unquoted → the list is exactly the two ids, in `GET /api/portfolio` order
+   (`portfolio_positions.contract` is unique, so a duplicate cannot be seeded; the
+   `dict.fromkeys` dedupe stays as a guard and needs no test of its own).
+   *(Amended after plan round 1, test-only: the round noted the unique constraint.)*
 7. `test_performance_snapshot_skip_cleared_when_no_positions_remain` — skip read, delete
    the positions (via the session), `GET /api/portfolio` returns `[]` → record cleared.
 8. `test_performance_existing_fields_unchanged` — for the skip-day DB state of test 3,
