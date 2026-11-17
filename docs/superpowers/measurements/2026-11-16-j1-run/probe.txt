@@ -1,0 +1,34 @@
+﻿probe: AAPL (4271 bars), MSFT (4271 bars), NVDA (4271 bars) from C:\bamendjou-tuning\bars-2026-11-13
+basket 110 symbols (10 x 11 sectors), trade universe 498, re-check universe 512 (trade + fire-rate), workers 3
+projected history (not measured): 4280 bars/symbol, business days ending 2026-11-13 (fixed export end date (export manifest C:\bamendjou-tuning\bars-2026-11-13\manifest.json))
+folds per horizon: Swing 51, Position 51, Quarterly 38, SemiAnnual 18, Annual 11
+strategy              direction   ms/call  ms/sim  combos   sample calls   winner calls   final calls    old recheck  projected h
+breakout_base         Bearish       0.253   4.776     308    143,007,480      7,939,614    10,805,760    365,758,092         6.52
+breakout_base         Bullish       0.220   4.618     308    143,007,480      7,939,614    10,805,760    365,758,092         5.94
+ma_crossover          Bearish       0.394   5.138     201     93,326,310      7,939,614    10,805,760    365,758,092         5.87
+ma_crossover          Bullish       0.395   8.392     201     93,326,310      7,939,614    10,805,760    365,758,092         7.01
+mean_reversion_bb     Bearish       2.206   4.532     110     51,074,100      7,939,614    10,805,760    292,186,062        15.36
+mean_reversion_bb     Bullish       2.463   5.537     110     51,074,100      7,939,614    10,805,760    292,186,062        17.27
+mean_reversion_multi  Bearish       3.986   4.517     196     91,004,760      7,939,614    10,805,760    359,451,918        42.56
+mean_reversion_multi  Bullish       3.302   6.640     196     91,004,760      7,939,614    10,805,760    359,451,918        36.57
+mean_reversion_rsi    Bearish       0.913   4.637     185     85,897,350      7,939,614    10,805,760    336,329,280        10.65
+mean_reversion_rsi    Bullish       0.899   4.344     185     85,897,350      7,939,614    10,805,760    336,329,280        10.39
+pullback_ema          Bearish       0.154   5.470     320    148,579,200      7,939,614    10,805,760    365,758,092         4.94
+pullback_ema          Bullish       0.149   6.589     320    148,579,200      7,939,614    10,805,760    365,758,092         5.39
+re-check signal calls (call-count model): new 224,944,488 = winners 95,275,368 + final 129,669,120; old full-span model 4,170,483,072 (0.054 x); sample grids 1,225,778,400 (full history, unchanged)
+gate mask: Bearish 1.521 ms/bar, Bullish 0.909 ms/bar
+simulated windows: 17,807,448 (60 cells, sample 110, trade universe 498; grids before invalid combinations are skipped)
+projected runtime: 169.46 h at 3 workers = signals 141.75 h + gate masks 0.99 h (process pool: divided by 3 workers) + simulation 26.72 h (in-process: not divided); signal series and gate masks are cached afterwards
+  breakout_base Bearish: signals 3.78 h + simulation 2.74 h
+  breakout_base Bullish: signals 3.29 h + simulation 2.65 h
+  ma_crossover Bearish: signals 4.08 h + simulation 1.79 h
+  ma_crossover Bullish: signals 4.10 h + simulation 2.92 h
+  mean_reversion_bb Bearish: signals 14.26 h + simulation 1.10 h
+  mean_reversion_bb Bullish: signals 15.92 h + simulation 1.34 h
+  mean_reversion_multi Bearish: signals 40.51 h + simulation 2.05 h
+  mean_reversion_multi Bullish: signals 33.56 h + simulation 3.02 h
+  mean_reversion_rsi Bearish: signals 8.85 h + simulation 1.80 h
+  mean_reversion_rsi Bullish: signals 8.71 h + simulation 1.69 h
+  pullback_ema Bearish: signals 2.39 h + simulation 2.55 h
+  pullback_ema Bullish: signals 2.31 h + simulation 3.07 h
+  (a projection, not a runtime guarantee: each strategy/direction is weighted with its own measured cost; the full-universe re-check is counted at one distinct winner per fold, a cold-cache upper bound (identical cached series reduce the actual work), an ordinary winner only on its fold's entry-window bars, a setup winner and the final parameters on full series)

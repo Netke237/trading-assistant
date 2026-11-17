@@ -1,0 +1,16 @@
+J1 per-horizon tuning (#115) - quiet window, agreed with Kenneth in chat on Mon 2026-11-16 (~23:20 Berlin)
+
+Machine: the mini PC (WIN-6MT8E13J4OR, 4 logical cores -> 3 workers), timezone Europe/Berlin.
+
+Export + probe (one-off): Mon 2026-11-16 ~23:25 -> must be finished by 01:30 Tue 2026-11-17.
+  Frozen export end date 2026-11-13 (last complete trading day stored). Not on the MEAS day,
+  before the 02:00 nightly ingestion.
+
+Tuning sessions (after Kenneth approves the measured projection in chat):
+  Daily window 03:30 -> 01:30 next day, below-normal priority. A cell starts only before
+  LatestStart (window end minus the longest finished cell plus margin); cells are never cut.
+  Nightly OHLCV ingestion: 02:00 Berlin daily (backend/config/ingestion_schedule.yaml,
+  Settings -> Data) - never overlapped.
+  MEAS day 8: Tue 2026-11-17, 18:35 -> ~21:00 (task "Bamendjou MEAS day 8 (2026-11-17)").
+  The tuning task is disabled for all of Tue 2026-11-17 and runs again from Wed 2026-11-18 03:30.
+  Any later MEAS day: disable "Bamendjou J1 tuning" the day before, enable it afterwards.

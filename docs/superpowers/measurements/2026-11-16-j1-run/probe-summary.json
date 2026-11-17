@@ -1,0 +1,278 @@
+{
+ "command": [
+  "python",
+  "backend/scripts/tune_horizons.py",
+  "--probe",
+  "--bars-dir",
+  "C:\\bamendjou-tuning\\bars-2026-11-13",
+  "--symbols",
+  "AAPL,MSFT,NVDA",
+  "--workers",
+  "3",
+  "--probe-json",
+  "C:\\bamendjou-tuning\\logs\\probe-2026-11-13.json"
+ ],
+ "python": "3.11.9",
+ "code": {
+  "git_commit": "d15620d8bcf47d130d6341667441ad6ad22e7c15",
+  "uncommitted_tuner_changes": [],
+  "sources": {
+   "backend/scripts/tune_horizons.py": "55c5bd7b891950526c474b7fb6094c28fa8274f68a03bb5c1ed1bd919dfb410b",
+   "backend/app/services/horizon_tuning/__init__.py": "c9b7a617a323b8a7f7b86db4ff67f5eb726303603899f9a367e643bfa3dc8f7c",
+   "backend/app/services/horizon_tuning/basket.py": "043dd302b82c8214e552b5d1e30ed4416fa496f96d9e7e69f38ae06eb8003cd2",
+   "backend/app/services/horizon_tuning/cache.py": "8d898a869cb7ec017f48278ec43d4c3d7ce5c7ccdf8f897aa4e725c7a1975846",
+   "backend/app/services/horizon_tuning/gates.py": "b54f679961dc5bf2d5b74398b8ca86bc47c059f701e504c212b26376e4ef5a6d",
+   "backend/app/services/horizon_tuning/report.py": "583bbd10e02f4069c171a65a4e1c57f9f027f6e0c08643cdbf581808118bbad2",
+   "backend/app/services/horizon_tuning/signals.py": "cf0faba8438eb52bf082f8bc3818938e156e66874766a2930fc383666f4e7acf",
+   "backend/app/services/horizon_tuning/simulate.py": "ab411a954e42222c8109f51a6708eef2e640e9675495d7a0d2e1e3342f3f07a2",
+   "backend/app/services/horizon_tuning/walk_forward_cell.py": "03c7f1beeb38cbd5f56d53f37f3e2119f0b81407b46eb9feea3cb2da928b7d65"
+  },
+  "signal_sources": {
+   "app.services.strategy_engine": "3821eeee4059ad40cc788d94182336c4b2c35f43161116fc2ddb49932f257006",
+   "app.services.setup_entries": "c8e2db2a068cec58122165e79b723502a9735cbd10c27f643806677b846595e3",
+   "app.services.horizon_tuning.signals": "cf0faba8438eb52bf082f8bc3818938e156e66874766a2930fc383666f4e7acf",
+   "app.services.horizon_tuning.simulate": "ab411a954e42222c8109f51a6708eef2e640e9675495d7a0d2e1e3342f3f07a2"
+  }
+ },
+ "symbols": [
+  "AAPL",
+  "MSFT",
+  "NVDA"
+ ],
+ "bars_dir": "C:\\bamendjou-tuning\\bars-2026-11-13",
+ "workers": 3,
+ "cells": 60,
+ "fixtures": {
+  "AAPL": {
+   "file": "AAPL_candles.json",
+   "sha256": "10a9071034b39f8a34a059610363004e26afdd14d4f571abf426c5be7134e44e",
+   "ohlcv_hash": "60573ff5f0bef4f07052d5920d61fa540602a7da1518163e00856e7e25df6d40",
+   "bars": 4271,
+   "first": "2009-11-20",
+   "last": "2026-11-13"
+  },
+  "MSFT": {
+   "file": "MSFT_candles.json",
+   "sha256": "c5bf713df23bc8093186cda5473e0876a3ae667c9e9de5ac774a68769cc65575",
+   "ohlcv_hash": "c7e4186879af74a9a2238aecd1929a225b0345306a4b0143e151c039e9072a26",
+   "bars": 4271,
+   "first": "2009-11-20",
+   "last": "2026-11-13"
+  },
+  "NVDA": {
+   "file": "NVDA_candles.json",
+   "sha256": "36e0c2c972864ed5f859c452884bb7b0616ebd000bfc405d2475ee0790bbd81c",
+   "ohlcv_hash": "eaf1b8b8def2b2f0e2779fd66c41e4b131747e374d9e30e0f959764b4e509268",
+   "bars": 4271,
+   "first": "2009-11-20",
+   "last": "2026-11-13"
+  }
+ },
+ "assumptions": {
+  "end": "2026-11-13",
+  "end_source": "fixed export end date (export manifest C:\\bamendjou-tuning\\bars-2026-11-13\\manifest.json)",
+  "bars_per_symbol": 4280,
+  "basket": 110,
+  "trade_universe": 498,
+  "recheck_universe": 512,
+  "folds": {
+   "Swing": 51,
+   "Position": 51,
+   "Quarterly": 38,
+   "SemiAnnual": 18,
+   "Annual": 11
+  }
+ },
+ "pairs": {
+  "breakout_base|Bearish": {
+   "cells": 5,
+   "sample_calls": 143007480,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 2065634,
+   "combos": 308,
+   "signal_ms_per_call": 0.2525290202604587,
+   "sim_ms_per_window": 4.776139999739826,
+   "signals_h": 3.7821564578660203,
+   "simulation_h": 2.7404881033951596,
+   "total_h": 6.522644561261179
+  },
+  "breakout_base|Bullish": {
+   "cells": 5,
+   "sample_calls": 143007480,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 2065634,
+   "combos": 308,
+   "signal_ms_per_call": 0.21953729028247052,
+   "sim_ms_per_window": 4.618199996184558,
+   "signals_h": 3.2880354872792665,
+   "simulation_h": 2.6498641474774147,
+   "total_h": 5.937899634756681
+  },
+  "ma_crossover|Bearish": {
+   "cells": 5,
+   "sample_calls": 93326310,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1251194,
+   "combos": 201,
+   "signal_ms_per_call": 0.39358646723590807,
+   "sim_ms_per_window": 5.138499999884516,
+   "signals_h": 4.084249831735097,
+   "simulation_h": 1.7859056580154187,
+   "total_h": 5.870155489750515
+  },
+  "ma_crossover|Bullish": {
+   "cells": 5,
+   "sample_calls": 93326310,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1251194,
+   "combos": 201,
+   "signal_ms_per_call": 0.3946460509625517,
+   "sim_ms_per_window": 8.391799998935312,
+   "signals_h": 4.095245140307684,
+   "simulation_h": 2.9166027244077415,
+   "total_h": 7.011847864715426
+  },
+  "mean_reversion_bb|Bearish": {
+   "cells": 5,
+   "sample_calls": 51074100,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 292186062,
+   "sim_windows": 873674,
+   "combos": 110,
+   "signal_ms_per_call": 2.2057215337122367,
+   "sim_ms_per_window": 4.532000003382564,
+   "signals_h": 14.259473821690891,
+   "simulation_h": 1.099858491932016,
+   "total_h": 15.359332313622907
+  },
+  "mean_reversion_bb|Bullish": {
+   "cells": 5,
+   "sample_calls": 51074100,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 292186062,
+   "sim_windows": 873674,
+   "combos": 110,
+   "signal_ms_per_call": 2.4628063469437027,
+   "sim_ms_per_window": 5.536900006700307,
+   "signals_h": 15.921467009951003,
+   "simulation_h": 1.3437348823483013,
+   "total_h": 17.265201892299306
+  },
+  "mean_reversion_multi|Bearish": {
+   "cells": 5,
+   "sample_calls": 91004760,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 359451918,
+   "sim_windows": 1635974,
+   "combos": 196,
+   "signal_ms_per_call": 3.9864549620136565,
+   "sim_ms_per_window": 4.516860004514456,
+   "signals_h": 40.51055243203368,
+   "simulation_h": 2.0526293136182034,
+   "total_h": 42.56318174565188
+  },
+  "mean_reversion_multi|Bullish": {
+   "cells": 5,
+   "sample_calls": 91004760,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 359451918,
+   "sim_windows": 1635974,
+   "combos": 196,
+   "signal_ms_per_call": 3.302045402027118,
+   "sim_ms_per_window": 6.640100001823157,
+   "signals_h": 33.555548643200005,
+   "simulation_h": 3.017508600106288,
+   "total_h": 36.573057243306295
+  },
+  "mean_reversion_rsi|Bearish": {
+   "cells": 5,
+   "sample_calls": 85897350,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 336329280,
+   "sim_windows": 1397714,
+   "combos": 185,
+   "signal_ms_per_call": 0.912995378289433,
+   "sim_ms_per_window": 4.636959999334067,
+   "signals_h": 8.846141054038586,
+   "simulation_h": 1.800317752363671,
+   "total_h": 10.646458806402258
+  },
+  "mean_reversion_rsi|Bullish": {
+   "cells": 5,
+   "sample_calls": 85897350,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 336329280,
+   "sim_windows": 1397714,
+   "combos": 185,
+   "signal_ms_per_call": 0.8986532605242399,
+   "sim_ms_per_window": 4.343860002700239,
+   "signals_h": 8.707178251179457,
+   "simulation_h": 1.6865205388372675,
+   "total_h": 10.393698790016725
+  },
+  "pullback_ema|Bearish": {
+   "cells": 5,
+   "sample_calls": 148579200,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1679534,
+   "combos": 320,
+   "signal_ms_per_call": 0.15412590218297093,
+   "sim_ms_per_window": 5.470400000922382,
+   "signals_h": 2.387875085660304,
+   "simulation_h": 2.55214522087477,
+   "total_h": 4.940020306535073
+  },
+  "pullback_ema|Bullish": {
+   "cells": 5,
+   "sample_calls": 148579200,
+   "winner_calls": 7939614,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1679534,
+   "combos": 320,
+   "signal_ms_per_call": 0.14929576606315628,
+   "sim_ms_per_window": 6.589299999177456,
+   "signals_h": 2.3130417089371558,
+   "simulation_h": 3.0741537180051415,
+   "total_h": 5.387195426942297
+  }
+ },
+ "gate_ms_per_bar": {
+  "Bearish": 1.5209229997708462,
+  "Bullish": 0.9090080001624301
+ },
+ "gate_bars": {
+  "Bearish": 4382720,
+  "Bullish": 4382720
+ },
+ "totals": {
+  "sample_calls": 1225778400,
+  "winner_calls": 95275368,
+  "final_calls": 129669120,
+  "legacy_recheck_calls": 4170483072,
+  "sim_windows": 17807448,
+  "new_recheck_calls": 224944488
+ },
+ "projection": {
+  "signals_h": 141.75096492387914,
+  "gates_h": 0.986083999261812,
+  "simulation_h": 26.719729151381394,
+  "total_h": 169.45677807452233
+ }
+}
