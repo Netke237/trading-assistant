@@ -161,7 +161,7 @@
 
 .newsDot_bull    { background: var(--pass); }
 .newsDot_bear    { background: var(--reject); }
-.newsDot_neutral { background: var(--text-dim); }
+.newsDot_neutral { background: var(--graphic-dim); }
 
 .newsMeta {
   display: flex;

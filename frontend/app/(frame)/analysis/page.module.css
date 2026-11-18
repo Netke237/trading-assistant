@@ -96,7 +96,7 @@
 }
 .meterFill {
   position: absolute; inset: 0 auto 0 0;
-  background: var(--text-dim); border-radius: 2px; transition: width 180ms ease-out;
+  background: var(--graphic-dim); border-radius: 2px; transition: width 180ms ease-out;
 }
 .meterFill_pos { background: var(--pass);    }
 .meterFill_neu { background: var(--caution); }

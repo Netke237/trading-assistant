@@ -116,8 +116,8 @@
 .ivFill_PASS    { background: var(--pass);    }
 .ivFill_CAUTION { background: var(--caution); }
 .ivFill_REJECT  { background: var(--reject);  }
-.ivFill_PENDING { background: var(--text-dim); }
-.ivFill_NO_DATA { background: var(--text-dim); }
+.ivFill_PENDING { background: var(--graphic-dim); }
+.ivFill_NO_DATA { background: var(--graphic-dim); }
 
 /* Event indicator with proxStatus coloring */
 .eventIndicator {

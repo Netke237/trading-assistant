@@ -237,7 +237,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--text-dim);
+  background: var(--graphic-dim);
   transition: transform 150ms, background 150ms;
 }
 

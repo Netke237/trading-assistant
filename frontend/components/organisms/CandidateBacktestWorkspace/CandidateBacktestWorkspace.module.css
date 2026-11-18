@@ -36,7 +36,7 @@
 .legendItem input { accent-color: var(--accent); }
 .swatchStrategy, .swatchBenchmark { display: inline-block; width: 22px; height: 0; }
 .swatchStrategy { border-top: 3px solid var(--accent); }
-.swatchBenchmark { border-top: 2px dashed var(--text-secondary); }
+.swatchBenchmark { border-top: 2px dashed var(--graphic-secondary); }
 .readout { margin-left: auto; }
 .workspace .axisTitle { margin: 0 20px 4px; }
 .performance, .performanceExpanded, .drawdown { margin: 0 12px; }

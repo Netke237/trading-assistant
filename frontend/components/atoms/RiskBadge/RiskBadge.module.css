@@ -27,11 +27,11 @@
 }
 
 .pending {
-  border-left-color: var(--text-dim);
+  border-left-color: var(--graphic-dim);
   color: var(--text-secondary);
 }
 
 .noData {
-  border-left-color: var(--text-dim);
+  border-left-color: var(--graphic-dim);
   color: var(--text-secondary);
 }

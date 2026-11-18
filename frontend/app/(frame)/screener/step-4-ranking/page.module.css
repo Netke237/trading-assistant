@@ -354,7 +354,7 @@
 .meterFill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: var(--text-dim);
+  background: var(--graphic-dim);
   border-radius: 2px;
   transition: width 180ms ease-out;
 }
