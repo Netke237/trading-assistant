@@ -11288,7 +11288,8 @@
           "commit": "e1a949fe",
           "validation_note": "RED 147 CSS + settings rows as predicted; 153 changed line pairs all same-role color: switches (coordinator script); typecheck clean; guard tests 51/51. Not a code audit."
         }
-      ]
+      ],
+      "plan_stage_note": "Plan round 1 verdict (0 gate findings, clean) was first committed as 1a854b0a with a non-canonical subject; re-stated in the canonical 'plan round 1 clean' subject so state.py can read it. Same single round, no new audit."
     }
   ],
   "already_shipped": [
