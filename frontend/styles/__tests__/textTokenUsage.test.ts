@@ -11,6 +11,13 @@
  *    (lightweight-charts `layout.textColor`), which are text and follow the new grey on purpose (§5.3).
  *    They are allowlisted by file path + the identifier the read is assigned to.
  *
+ * Status rule (T2): --pass / --caution / --reject / --accent / --neutral / --accent-hover keep their values
+ * for fills, borders and chart series; text reads the AA --text-<role> token of the same role.
+ *  - CSS: no declaration whose property is exactly `color` references a base status/accent token.
+ *  - TSX: no line matches `color:\s*[^,}]*var\(--(pass|caution|reject|accent|neutral)\)`, and the
+ *    settings page's `degColor` (rendered as text) holds no base-token literal. Chart series reads via
+ *    token('--pass') etc. are non-text and stay (§5.3).
+ *
  * Walks frontend/ (.css, .ts, .tsx), skipping node_modules, .next, coverage, __tests__, __mocks__ and
  * styles/tokens.css, and comment lines (starting with `*`, `//` or `/*`).
  */
@@ -106,5 +113,34 @@ describe('text token usage guard', () => {
       }
     }
     expect([...TSX_GREY_TEXT_ALLOW].filter((k) => !seen.has(k))).toEqual([]);
+  });
+
+  it('status rule (CSS): `color:` reads --text-<role>, never the base status/accent token', () => {
+    const offenders: string[] = [];
+    const re = /var\(\s*(--(?:pass|caution|reject|accent-hover|accent|neutral))\s*\)/g;
+    for (const { rel, lineNo, text } of sourceLines(/\.css$/)) {
+      for (const m of text.matchAll(re)) {
+        if (cssProperty(text.slice(0, m.index)) === 'color') offenders.push(`${rel}:${lineNo} color: ${m[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('status rule (TSX): no inline-style `color:` reads var(--pass|--caution|--reject|--accent|--neutral)', () => {
+    const offenders: string[] = [];
+    const re = /color:\s*[^,}]*var\(--(pass|caution|reject|accent|neutral)\)/;
+    for (const { rel, lineNo, text } of sourceLines(/\.tsx$/)) {
+      if (re.test(text)) offenders.push(`${rel}:${lineNo}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('status rule (settings): the walk-forward degradation text colour uses text tokens', () => {
+    const src = fs.readFileSync(path.join(FRONTEND, 'app/(frame)/settings/page.tsx'), 'utf8');
+    const assignments = src.split(/\r?\n/).filter((l) => /\bdegColor\s*=/.test(l));
+    expect(assignments.length).toBeGreaterThan(0);
+    for (const line of assignments) {
+      expect(line).not.toMatch(/'var\(--(pass|caution|reject)\)'/);
+    }
   });
 });

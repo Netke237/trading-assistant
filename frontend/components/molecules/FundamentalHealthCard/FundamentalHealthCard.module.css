@@ -38,7 +38,7 @@
 }
 .flag {
   font-size: 11px;
-  color: var(--reject);
+  color: var(--text-reject);
   border: 1px solid var(--reject);
   border-radius: 3px;
   padding: 1px 5px;

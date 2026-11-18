@@ -33,7 +33,7 @@
 }
 
 .navBtn:hover:not(:disabled) {
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .navBtn:focus-visible {
@@ -82,7 +82,7 @@
 
 .pinBtnOn,
 .pinBtnOn:hover {
-  color: var(--caution);
+  color: var(--text-caution);
   border-color: var(--caution);
   background: transparent;
 }
@@ -127,7 +127,7 @@
 }
 
 .chipSelect:hover {
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .chipRemove {

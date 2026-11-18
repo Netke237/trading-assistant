@@ -107,17 +107,17 @@
 
 .kindInfo {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .kindAction {
   background: color-mix(in srgb, var(--caution) 15%, transparent);
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .kindCritical {
   background: color-mix(in srgb, var(--reject) 15%, transparent);
-  color: var(--reject);
+  color: var(--text-reject);
 }
 
 .eventItem {

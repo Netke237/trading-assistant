@@ -55,7 +55,7 @@
 .item.itemActive { background: color-mix(in srgb, var(--pass) 8%, transparent); }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.check { margin-left: auto; font-size: 11px; color: var(--pass); }
+.check { margin-left: auto; font-size: 11px; color: var(--text-pass); }
 
 .activeSection {
   padding: 8px 12px 4px;
@@ -92,7 +92,7 @@
   padding: 0 2px;
   margin-left: auto;
 }
-.removeBtn:hover { color: var(--reject); }
+.removeBtn:hover { color: var(--text-reject); }
 
 .paramRow {
   width: 100%;

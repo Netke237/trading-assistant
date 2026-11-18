@@ -26,7 +26,7 @@
 .workspace .subtitle { margin: 4px 0 0; }
 .controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .workspace .toggle { font-size: 11px; padding: 6px 10px; border-radius: var(--radius-sm); }
-.workspace .toggleOn { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.workspace .toggleOn { border-color: var(--accent); color: var(--text-accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
 .separator { width: 1px; height: 22px; background: var(--border-subtle); margin: 0 4px; }
 .workspace .comparison { margin: 0 20px 8px; padding: 9px 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); font-size: 12px; color: var(--text-primary); }
 .comparison strong { font-weight: 600; }
@@ -73,7 +73,7 @@
 
 .scope { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .navigation { display: flex; align-items: center; gap: 16px; padding: 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); }
-.navigation a { color: var(--accent); }
+.navigation a { color: var(--text-accent); }
 .navigation input, .navigation select { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 6px; }
 
 /* Supporting disclosures: calculation basis, then complete provenance */

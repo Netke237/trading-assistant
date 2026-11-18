@@ -81,7 +81,7 @@
 
 .dialogIcon {
   font-size: 24px;
-  color: var(--reject);
+  color: var(--text-reject);
   line-height: 1;
 }
 

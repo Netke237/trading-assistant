@@ -48,7 +48,7 @@
 
 .overrideText {
   font-size: 11px;
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .tableHeader {
@@ -130,15 +130,15 @@
 }
 
 .eventIndicator_PASS {
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .eventIndicator_CAUTION {
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .eventIndicator_REJECT {
-  color: var(--reject);
+  color: var(--text-reject);
 }
 
 .eventIndicator_PENDING,

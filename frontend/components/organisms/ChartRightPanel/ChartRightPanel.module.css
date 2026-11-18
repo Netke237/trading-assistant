@@ -23,7 +23,7 @@
 }
 
 .tabActive {
-  color: var(--pass);
+  color: var(--text-pass);
   border-bottom: 2px solid var(--pass);
 }
 
@@ -104,7 +104,7 @@
   padding: 0 2px;
   line-height: 1;
 }
-.alertDismiss:hover { color: var(--reject); }
+.alertDismiss:hover { color: var(--text-reject); }
 
 .alertOch { margin-top: 2px; }
 

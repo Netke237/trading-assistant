@@ -29,7 +29,7 @@
   background: transparent;
   border: 1px solid var(--reject);
   border-radius: var(--radius-md);
-  color: var(--reject);
+  color: var(--text-reject);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -59,13 +59,13 @@
 
 .directionPill_BULL {
   background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
-  color: var(--pass);
+  color: var(--text-pass);
   border: 1px solid var(--pass);
 }
 
 .directionPill_BEAR {
   background: color-mix(in srgb, var(--reject) 15%, var(--bg-surface));
-  color: var(--reject);
+  color: var(--text-reject);
   border: 1px solid var(--reject);
 }
 
@@ -119,8 +119,8 @@
   gap: var(--space-1);
 }
 
-.trendUp   { font-size: 13px; color: var(--pass);   line-height: 1; }
-.trendDown { font-size: 13px; color: var(--reject);  line-height: 1; }
+.trendUp   { font-size: 13px; color: var(--text-pass);   line-height: 1; }
+.trendDown { font-size: 13px; color: var(--text-reject);  line-height: 1; }
 
 /* ---------- Mini index charts ---------- */
 

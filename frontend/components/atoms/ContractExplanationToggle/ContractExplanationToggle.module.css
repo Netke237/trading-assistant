@@ -35,7 +35,7 @@
 .open {
   background-color: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .chevron {

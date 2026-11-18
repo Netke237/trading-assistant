@@ -23,9 +23,9 @@
 }
 
 .starOn {
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .starOn:hover {
-  color: var(--caution);
+  color: var(--text-caution);
 }

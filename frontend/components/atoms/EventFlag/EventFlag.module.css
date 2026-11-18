@@ -16,5 +16,5 @@
 }
 
 .distant  { color: var(--text-dim); }
-.near     { color: var(--caution); }
-.imminent { color: var(--reject); }
+.near     { color: var(--text-caution); }
+.imminent { color: var(--text-reject); }

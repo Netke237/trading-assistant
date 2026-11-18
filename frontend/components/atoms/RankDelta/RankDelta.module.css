@@ -9,6 +9,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.up   { color: var(--pass); }
-.down { color: var(--reject); }
+.up   { color: var(--text-pass); }
+.down { color: var(--text-reject); }
 .flat { color: var(--text-dim); }

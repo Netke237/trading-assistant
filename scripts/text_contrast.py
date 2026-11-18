@@ -17,7 +17,7 @@ TOKENS = os.path.join(FRONTEND, "styles", "tokens.css")
 # Tokens whose value is used as text colour on --bg-base / --bg-surface.
 TEXT_TOKENS = [
     "--text-primary", "--text-secondary", "--text-dim",
-    "--text-pass", "--text-caution", "--text-reject", "--text-accent", "--text-neutral",
+    "--text-pass", "--text-caution", "--text-reject", "--text-accent", "--text-accent-hover", "--text-neutral",
 ]
 # Tokens whose text usages the plan inventories (base status/accent tokens stay for fills).
 USAGE_TOKENS = ["text-secondary", "text-dim", "pass", "caution", "reject", "accent", "neutral"]

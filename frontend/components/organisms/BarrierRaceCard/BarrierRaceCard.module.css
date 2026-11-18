@@ -257,7 +257,7 @@
 
 .selectTarget[aria-pressed='true'] {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .selectTarget:focus-visible {

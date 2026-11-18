@@ -3079,19 +3079,19 @@ function StrategyTuningForm() {
           </span>
         )}
         {job && job.status === 'completed' && (
-          <span style={{ color: 'var(--pass)', fontSize: 13, alignSelf: 'center' }}>
+          <span style={{ color: 'var(--text-pass)', fontSize: 13, alignSelf: 'center' }}>
             Done — {proposals.length} proposals ready
           </span>
         )}
         {job && job.status === 'failed' && (
-          <span style={{ color: 'var(--reject)', fontSize: 13, alignSelf: 'center' }}>
+          <span style={{ color: 'var(--text-reject)', fontSize: 13, alignSelf: 'center' }}>
             Failed: {job.error}
           </span>
         )}
       </div>
 
       {error && (
-        <div style={{ color: 'var(--reject)', fontSize: 13, marginBottom: 16 }}>
+        <div style={{ color: 'var(--text-reject)', fontSize: 13, marginBottom: 16 }}>
           {error}
         </div>
       )}
@@ -3123,7 +3123,7 @@ interface ProposalCardProps {
 function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const deg = proposal.verdict.degradation_pct;
-  const degColor = deg > 0.6 ? 'var(--reject)' : deg > 0.3 ? 'var(--caution)' : 'var(--pass)';
+  const degColor = deg > 0.6 ? 'var(--text-reject)' : deg > 0.3 ? 'var(--text-caution)' : 'var(--text-pass)';
 
   return (
     <div style={{
@@ -3138,7 +3138,7 @@ function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProp
           </div>
           <div style={{
             fontSize: 12,
-            color: proposal.eligible ? 'var(--pass)' : 'var(--reject)',
+            color: proposal.eligible ? 'var(--text-pass)' : 'var(--text-reject)',
           }}>
             {proposal.eligible ? 'Eligible' : 'Not eligible'} · Consistency: {(proposal.consistency * 100).toFixed(0)}% positive folds
           </div>
@@ -3188,7 +3188,7 @@ function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProp
         </div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>OOS Sharpe</div>
-          <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: proposal.oos_metrics.sharpe > 0.5 ? 'var(--pass)' : 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: proposal.oos_metrics.sharpe > 0.5 ? 'var(--text-pass)' : 'var(--text-secondary)' }}>
             {proposal.oos_metrics.sharpe.toFixed(2)}
           </div>
         </div>

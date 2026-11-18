@@ -22,9 +22,9 @@
   cursor: pointer;
 }
 
-.pass    { background: var(--pass-bg);    color: var(--pass);    border-color: var(--pass-border); }
-.caution { background: var(--caution-bg); color: var(--caution); border-color: var(--caution-border); }
-.reject  { background: var(--reject-bg);  color: var(--reject);  border-color: var(--reject-border); }
+.pass    { background: var(--pass-bg);    color: var(--text-pass);    border-color: var(--pass-border); }
+.caution { background: var(--caution-bg); color: var(--text-caution); border-color: var(--caution-border); }
+.reject  { background: var(--reject-bg);  color: var(--text-reject);  border-color: var(--reject-border); }
 .dim     { background: transparent;       color: var(--text-dim); border-color: var(--border-subtle); }
 
 .popover {

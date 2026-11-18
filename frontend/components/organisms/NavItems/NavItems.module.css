@@ -29,12 +29,12 @@
 .itemActive {
   border-left-color: var(--accent);
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .itemActive:hover {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .iconWrap {

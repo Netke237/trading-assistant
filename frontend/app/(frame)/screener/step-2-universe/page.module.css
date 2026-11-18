@@ -445,7 +445,7 @@
 
 .loadBtnRunning {
   border-color: var(--pass);
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .progressWrap {
