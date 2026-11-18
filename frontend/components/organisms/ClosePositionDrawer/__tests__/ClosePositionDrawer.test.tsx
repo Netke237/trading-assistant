@@ -53,10 +53,10 @@ describe('ClosePositionDrawer realized P&L', () => {
       contract: 'TSLA|STOCK', direction: 'Bearish', entryPrice: 100, currentPrice: 110, contracts: 5,
     });
     render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
-    // (100 - 110) * 1 * 5 = -$50, -10%. Component renders the sign as part of the
-    // number after the literal "$", i.e. "$-50" not "-$50".
-    expect(screen.getByText(/\$-50\b/)).toBeInTheDocument();
-    expect(screen.getByText(/-10\.0%/)).toBeInTheDocument();
+    // (100 - 110) * 1 * 5 = -$50, -10%. Rendered with a Unicode minus before
+    // the "$" (PORTFOLIO-NUMBERS T3): "−$50", "−10.0%".
+    expect(screen.getByText(/−\$50\b/)).toBeInTheDocument();
+    expect(screen.getByText(/−10\.0%/)).toBeInTheDocument();
   });
 
   it('long option: uses the 100x contract multiplier, not the stock 1x multiplier', () => {
@@ -76,9 +76,27 @@ describe('ClosePositionDrawer realized P&L', () => {
     render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
     // A long put is still a BUY-to-open position, not a short — closing it is a plain
     // sell-to-close, so P&L follows the long formula regardless of the Bearish direction
-    // tag: (1 - 2) * 100 * 2 = -$200, -50%. Rendered as "$-200", sign after the "$".
-    expect(screen.getByText(/\$-200\b/)).toBeInTheDocument();
-    expect(screen.getByText(/-50\.0%/)).toBeInTheDocument();
+    // tag: (1 - 2) * 100 * 2 = -$200, -50%. Rendered as "−$200" (Unicode minus).
+    expect(screen.getByText(/−\$200\b/)).toBeInTheDocument();
+    expect(screen.getByText(/−50\.0%/)).toBeInTheDocument();
+  });
+});
+
+describe('ClosePositionDrawer title (PORTFOLIO-NUMBERS T3)', () => {
+  it('shows a readable option contract and keeps the raw key as the title', () => {
+    const position = makePosition({ contract: 'AAPL|185|2027-01-15|C', entryPrice: 2, currentPrice: 3 });
+    const { container } = render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    const titled = container.querySelector('[title="AAPL|185|2027-01-15|C"]') as HTMLElement;
+    expect(titled).not.toBeNull();
+    expect(titled).toHaveTextContent('Close AAPL 185C · 15 Jan 27');
+    expect(screen.queryByText(/AAPL\|185\|2027-01-15\|C/)).not.toBeInTheDocument();
+  });
+
+  it('shows "Stock" for a stock row, the raw key as the title', () => {
+    const position = makePosition({ contract: 'AAPL|STOCK' });
+    const { container } = render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    expect(screen.getByText('Close AAPL Stock')).toBeInTheDocument();
+    expect(container.querySelector('[title="AAPL|STOCK"]')).not.toBeNull();
   });
 });
 
@@ -91,7 +109,7 @@ describe('ClosePositionDrawer — the row changes size under an open dialog', ()
   it('clamps the quantity to the new size and sends it on the next confirm', () => {
     const onConfirm = jest.fn();
     const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
-    expect(screen.getByText(/\+\$1000\b/)).toBeInTheDocument();
+    expect(screen.getByText(/\+\$1,000\b/)).toBeInTheDocument();
 
     rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
     expect(screen.getByText(/of 33/)).toBeInTheDocument();
