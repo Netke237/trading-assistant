@@ -15,14 +15,6 @@
       "expires_at": "2026-11-19T02:22:32Z",
       "note": "Board #659 text contrast AA tokens (resume)",
       "task": "TEXT-CONTRAST-AA"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/portfolio-quote-gaps-8c0ac135",
-      "claimed_at": "2026-11-18T21:15:37Z",
-      "expires_at": "2026-11-19T02:29:08Z",
-      "note": "Board #658 quote gaps + snapshot fields (resumed)",
-      "task": "PORTFOLIO-QUOTE-GAPS"
     }
   ]
 }
