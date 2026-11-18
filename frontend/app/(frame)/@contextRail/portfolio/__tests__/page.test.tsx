@@ -6,6 +6,7 @@ import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useNotesStore } from '@/lib/notesStore';
 import type { PortfolioPosition } from '@/types/domain';
+import { portfolio20261117 } from '../../../../../test-utils/portfolioFixture20261117';
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -81,5 +82,56 @@ describe('PortfolioContextRail', () => {
     render(<PortfolioContextRail />);
 
     expect(await screen.findByLabelText('Note for TSLA')).toBeInTheDocument();
+  });
+});
+
+// PORTFOLIO-NUMBERS T2 (#657): the rail's money and greeks in consistent
+// units. Fixture: the three live positions of 2026-11-17 (plan §2).
+describe('PortfolioContextRail — numbers (PORTFOLIO-NUMBERS)', () => {
+  // The value cell sits beside its label inside the same row <div>.
+  function rowValue(label: string): string {
+    const row = screen.getByText(label).parentElement as HTMLElement;
+    return (row.textContent ?? '').slice(label.length);
+  }
+
+  beforeEach(() => {
+    usePortfolioStore.setState({ positions: portfolio20261117() });
+    usePortfolioUiStore.setState({ selectedSymbol: null });
+    useWatchlistStore.setState({ added: [] });
+    useNotesStore.setState({ notes: {} });
+  });
+
+  it('labels delta as share-equivalent and keeps its number', () => {
+    render(<PortfolioContextRail />);
+    expect(rowValue('Δ Delta (share-equiv.)')).toBe('92.32');
+  });
+
+  it('shows delta in dollars, with a note for the position it leaves out', () => {
+    render(<PortfolioContextRail />);
+    expect(rowValue('Δ in dollars')).toBe('$2,451');
+    expect(screen.getByText('Δ in dollars excludes 1 position without delta or underlying price')).toBeInTheDocument();
+  });
+
+  it('shows theta in dollars per day (× 100 per contract), not per share', () => {
+    render(<PortfolioContextRail />);
+    expect(rowValue('Θ Theta / day')).toBe('−$1.81');
+  });
+
+  it('formats Deployed and Open P&L as money, and keeps the unquoted note', () => {
+    render(<PortfolioContextRail />);
+    expect(rowValue('Deployed')).toBe('$494');
+    expect(rowValue('Open P&L')).toBe('−$37');
+    expect(screen.getByText('Excludes 1 position without a quote')).toBeInTheDocument();
+  });
+
+  it('shows — for all three greeks and no delta-dollars note when no position has greeks', () => {
+    usePortfolioStore.setState({
+      positions: portfolio20261117().map((p) => ({ ...p, delta: undefined, theta: undefined })),
+    });
+    render(<PortfolioContextRail />);
+    expect(rowValue('Δ Delta (share-equiv.)')).toBe('—');
+    expect(rowValue('Δ in dollars')).toBe('—');
+    expect(rowValue('Θ Theta / day')).toBe('—');
+    expect(screen.queryByText(/^Δ in dollars excludes/)).not.toBeInTheDocument();
   });
 });

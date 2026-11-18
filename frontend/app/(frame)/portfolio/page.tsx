@@ -1,10 +1,9 @@
 'use client';
 
 /*
- * Portfolio — Phase 5.
- * Open positions table with DTE progress bars, sticky totals footer, and
- * inline in-memory edit. Click the pencil to change stop / target / size
- * or close the position (removed from local state — mock only).
+ * Portfolio — open positions, synced from the backend every 30 s, with a
+ * totals footer, an editor drawer per row (pencil), a close dialog, and a
+ * History tab of closed trades with the realized P&L views.
  */
 
 import { useEffect, useState } from 'react';
@@ -31,7 +30,8 @@ import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
-import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
+import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars } from '@/lib/portfolioTotals';
+import { formatMoney, formatSignedPct, readableContract, moneyTone } from '@/lib/portfolioFormat';
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
@@ -66,7 +66,7 @@ function IvPositionCell({ position }: { position: PortfolioPosition }) {
   );
 }
 
-const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
+const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 76px 90px 40px';
 
 function downloadCsv(filename: string, text: string): void {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
@@ -150,6 +150,7 @@ export default function PortfolioPage() {
   // A row with no quote carries 0 defaults, not a price: the totals leave it
   // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
+  const { thetaDollars } = aggregateGreeks(positions);
 
   const now = new Date();
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -220,10 +221,10 @@ export default function PortfolioPage() {
       </div>
 
       <div className={styles.perfStrip}>
-        <PerfStat label="Today"  value={performance.realizedToday} period={todayLabel} />
-        <PerfStat label="Week"   value={performance.realizedWeek}  period={weekLabel} />
-        <PerfStat label="Month"  value={performance.realizedMonth} period={monthLabel} />
-        <PerfStat label="Year"   value={performance.realizedYear}  period={yearLabel} />
+        <PerfStat label="Realized today"      value={performance.realizedToday} period={todayLabel} />
+        <PerfStat label="Realized this week"  value={performance.realizedWeek}  period={weekLabel} />
+        <PerfStat label="Realized this month" value={performance.realizedMonth} period={monthLabel} />
+        <PerfStat label="Realized this year"  value={performance.realizedYear}  period={yearLabel} />
       </div>
 
       {tab === 'history' && (
@@ -301,11 +302,11 @@ export default function PortfolioPage() {
           {history.map((h) => (
             <div key={h.id} className={styles.historyRow}>
               <Data size={13} weight={500}>{h.symbol}</Data>
-              <Text size={12} tone="secondary">{h.contract}</Text>
+              <span title={h.contract}><Text size={12} tone="secondary">{readableContract(h.contract)}</Text></span>
               <Text size={11} tone="dim">{h.qtyClosed}x · {h.entryPrice.toFixed(2)} → {h.exitPrice.toFixed(2)}</Text>
               <Text size={11} tone="secondary">{h.entryDate ? `${h.entryDate} → ${h.exitDate}` : h.exitDate}</Text>
               <Data size={13} weight={500} tone={h.realizedPnlDollar > 0 ? 'pass' : h.realizedPnlDollar < 0 ? 'reject' : undefined}>
-                {h.realizedPnlDollar > 0 ? '+' : ''}${Math.round(h.realizedPnlDollar)}
+                {formatMoney(h.realizedPnlDollar, { plus: true })}
               </Data>
               <button type="button" className={styles.historyRemove} onClick={() => removeHistory(h.id)} aria-label={`Remove ${h.symbol} from history`} title="Remove from history">×</button>
             </div>
@@ -339,7 +340,7 @@ export default function PortfolioPage() {
             <Text size={11} tone="dim" className={styles.right}>P&L</Text>
             <Text size={11} tone="dim" className={styles.right}>{ivColumnLabel(ivBasesOf(positions))}</Text>
             <Text size={11} tone="dim" className={styles.right}>Δ</Text>
-            <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
+            <Text size={11} tone="dim" className={styles.right}>Θ $/DAY</Text>
             <Text size={11} tone="dim">STATUS</Text>
             <span aria-hidden />
           </div>
@@ -351,7 +352,7 @@ export default function PortfolioPage() {
                   <OpenChartButton symbol={p.symbol} />
                   <Data size={13} weight={500}>{p.symbol}</Data>
                   <span className={styles.contractCell}>
-                    <Text size={12} tone="secondary">{p.contract}</Text>
+                    <span title={p.contract}><Text size={12} tone="secondary">{readableContract(p.contract)}</Text></span>
                     {p.source === 'manual'     && <span className={styles.srcManual}>MANUAL</span>}
                     {p.source === 'paper'      && <span className={styles.srcPaper} title={p.sourceLabel ?? 'Paper broker execution'}>PAPER</span>}
                     {p.source === 'auto-trade' && <span className={styles.srcAuto}  title={p.sourceLabel ?? 'Auto-trade execution'}>AUTO</span>}
@@ -394,10 +395,10 @@ export default function PortfolioPage() {
                   ) : (
                     <div className={styles.pnlCell}>
                       <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                        {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                        {formatMoney(p.pnlDollar, { plus: true })}
                       </Data>
                       <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                        {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                        {formatSignedPct(p.pnlPct, 1)}
                       </Data>
                     </div>
                   )}
@@ -405,9 +406,16 @@ export default function PortfolioPage() {
                   <Data size={12} className={styles.right}>
                     {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
                   </Data>
-                  <Data size={12} className={styles.right} tone="reject">
-                    {p.theta !== undefined ? p.theta.toFixed(2) : '—'}
-                  </Data>
+                  {(() => {
+                    const th = positionThetaDollars(p);
+                    return th == null ? (
+                      <Data size={12} className={styles.right}>—</Data>
+                    ) : (
+                      <Data size={12} className={styles.right} tone={moneyTone(th, 2)}>
+                        {formatMoney(th, { decimals: 2, plus: true })}
+                      </Data>
+                    );
+                  })()}
                   <StatusBadge status={p.status} tooltip={positionStatusTooltip(p.status)} />
                   <button
                     type="button"
@@ -441,18 +449,24 @@ export default function PortfolioPage() {
           <div className={styles.footer}>
             <div className={styles.footerGroup}>
               <Text size={11} tone="secondary">Deployed</Text>
-              <Data size={14} weight={500}>${Math.round(deployed).toLocaleString()}</Data>
+              <Data size={14} weight={500}>{formatMoney(deployed)}</Data>
             </div>
             <div className={styles.footerGroup}>
               <Text size={11} tone="secondary">Open P&L</Text>
               <Data size={14} weight={500} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
-                {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+                {formatMoney(openPnL, { plus: true })}
               </Data>
             </div>
             <div className={styles.footerGroup}>
-              <Text size={11} tone="secondary">Return</Text>
+              <Text size={11} tone="secondary">Return on cost</Text>
               <Data size={14} weight={500} tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}>
-                {openPnLPct > 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
+                {formatSignedPct(openPnLPct, 1)}
+              </Data>
+            </div>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">Θ per day</Text>
+              <Data size={14} weight={500} tone={thetaDollars != null ? moneyTone(thetaDollars, 2) : undefined}>
+                {thetaDollars != null ? formatMoney(thetaDollars, { decimals: 2, plus: true }) : '—'}
               </Data>
             </div>
             <div className={styles.footerGroup}>
@@ -531,7 +545,7 @@ function PerfStat({ label, value, period }: { label: string; value: number; peri
   return (
     <div className={styles.perfStat}>
       <Text size={11} tone="secondary">{label}</Text>
-      <Data size={16} weight={500} tone={tone}>{value > 0 ? '+' : ''}${Math.round(value)}</Data>
+      <Data size={16} weight={500} tone={tone}>{formatMoney(value, { plus: true })}</Data>
       {period && <Text size={10} tone="dim">{period}</Text>}
     </div>
   );
