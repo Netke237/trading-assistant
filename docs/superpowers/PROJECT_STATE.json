@@ -11237,10 +11237,10 @@
       "branch": "board/portfolio-quote-gaps-8c0ac135",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 70,
+      "completion_pct": 85,
       "plan": "docs/superpowers/plans/2026-11-17-portfolio-quote-gaps-plan.md",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "verify": {
         "kind": "present",
@@ -11275,6 +11275,19 @@
           "outstanding": [],
           "clean": true,
           "below_gate_noted": "Test 6 seeded a duplicate contract that the unique constraint on portfolio_positions.contract rejects; amended test-only (no behaviour change) after the round."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "portfolio_quote_gaps_code_audit_1",
+          "diff": "8268d4c73e6eff912652c12b967675e2a9d9bf67..e04559426aae0eb2f50b622cde392e2087cbf068",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "below_gate_noted": "(1) reset fixture is per-test, not autouse: an earlier test's skip record persists in-process, harmless while only the new tests read /performance; (2) snapshotSkippedOn null after a backend restart means 'no skip recorded since restart', not 'curves current' - #661 must render it so; (3) record names a closed contract until the next GET /api/portfolio; (4) cancellation between commit and the clear leaves a stale record, lastSnapshotDate still true; (5) dict.fromkeys dedupe untested (unique constraint)."
         }
       ],
       "build_tickets": [
@@ -11286,7 +11299,14 @@
           "commit": "e0f53e5d",
           "validation_note": "Coordinator re-run, Windows Py3.11.9 at e0f53e5d: focused test_portfolio_close_history 22 pass; full backend 10383 pass/11 skip/15 fail/1 error, all Windows-host baseline (POSIX modes, time.tzset, heston probe/perf, governor timing) or load flakes that pass alone; none in touched files. Frontend typecheck clean. Not a code audit."
         }
-      ]
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "portfolio_quote_gaps_code_audit_1 (fresh gate-auditor, bmad-review-adversarial-general)",
+        "diff": "8268d4c73e6eff912652c12b967675e2a9d9bf67..e04559426aae0eb2f50b622cde392e2087cbf068"
+      }
     }
   ],
   "already_shipped": [
