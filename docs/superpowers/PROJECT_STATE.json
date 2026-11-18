@@ -11315,7 +11315,9 @@
         "TradeCard.methodPick TC-UI-02 queryByText(/7.25/) matches clock timestamps (pre-existing on main; T1 implementer).",
         "Step-7/TradeCard suites exceed 5 s per-test timeouts under parallel load on the desktop (pre-existing).",
         "Text on --bg-surface-2/3 and on coloured fills not measured (plan s11)."
-      ]
+      ],
+      "pr": 676,
+      "self_merge": "SELF-MERGE PENDING, PR #676, audited head 6dc3972c (code round 1 clean over 8268d4c7..6dc3972c); later commits are doc-only records (fcd57abe verdict, this pending record). main record: 8268d4c7. Not merged; not shipped."
     }
   ],
   "already_shipped": [
