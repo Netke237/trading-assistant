@@ -3,26 +3,10 @@
     {
       "agent": "claude",
       "branch": "board/portfolio-numbers-3b6830e9",
-      "claimed_at": "2026-11-17T19:01:31Z",
-      "expires_at": "2026-11-17T22:28:22Z",
-      "note": "Board #657 portfolio numbers",
+      "claimed_at": "2026-11-18T21:15:26Z",
+      "expires_at": "2026-11-19T00:15:26Z",
+      "note": "Board #657 portfolio numbers (resume)",
       "task": "PORTFOLIO-NUMBERS"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/portfolio-quote-gaps-8c0ac135",
-      "claimed_at": "2026-11-17T19:01:43Z",
-      "expires_at": "2026-11-17T22:14:31Z",
-      "note": "Board #658 quote gaps + snapshot fields",
-      "task": "PORTFOLIO-QUOTE-GAPS"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/text-contrast-aa-58bf2d7a",
-      "claimed_at": "2026-11-17T19:28:16Z",
-      "expires_at": "2026-11-17T22:54:45Z",
-      "note": "Board #659 text contrast AA tokens",
-      "task": "TEXT-CONTRAST-AA"
     }
   ]
 }
