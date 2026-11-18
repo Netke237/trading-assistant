@@ -365,3 +365,152 @@ async def test_get_portfolio_with_every_quote_writes_the_snapshot(client_with_se
     assert not any(p["quoteUnavailable"] for p in rows)
     # open value 1.20 x 100 + 410.50 x 1; open P&L (1.20 - 1) x 100 + (410.50 - 1) x 1
     assert await _snapshots(Session) == [(_date.today().isoformat(), 530.5, 429.5, 530.5)]
+
+
+# ── /api/portfolio/performance snapshot status (PORTFOLIO-QUOTE-GAPS T1) ─────
+#
+# lastSnapshotDate is the newest equity_snapshots row; snapshotSkippedOn /
+# snapshotSkippedContracts describe the latest GET /api/portfolio that skipped
+# the snapshot write because of unquoted rows (process-local, module-level).
+# The fields describe; the curves stay exactly as they were.
+
+from sqlalchemy import delete  # noqa: E402
+
+import app.routers.portfolio as portfolio_module  # noqa: E402
+
+_OPT = "AAPL|185|2027-01-15|C"
+_STK = "MSFT|STOCK"
+_ALL_QUOTED = {_OPT: {"price": 1.2}, _STK: {"price": 410.5}}
+_OPT_UNQUOTED = {_OPT: None, _STK: {"price": 410.5}}
+_NONE_QUOTED = {_OPT: None, _STK: None}
+
+
+@pytest.fixture
+def reset_snapshot_skip(monkeypatch):
+    # The skip record is module-level, so every test here starts from "none recorded".
+    monkeypatch.setattr(portfolio_module, "_last_snapshot_skip", None)
+
+
+async def _read_portfolio(client, quotes):
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async", new=_quotes(quotes)),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=175.0)),
+    ):
+        r = await client.get("/api/portfolio")
+    assert r.status_code == 200
+    return r.json()
+
+
+async def _seed_skip_day_state(Session):
+    async with Session() as s:
+        s.add(EquitySnapshotModel(id="snap-1023", snapshot_date="2026-10-23", realized_cumulative=0.0,
+                                  open_value=41170.0, open_pnl=1530.0, total_value=41170.0))
+        await s.commit()
+    await _seed_two(Session)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_status_empty(client):
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["lastSnapshotDate"] is None
+    assert perf["snapshotSkippedOn"] is None
+    assert perf["snapshotSkippedContracts"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_status_after_a_write_day(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    await _read_portfolio(client, _ALL_QUOTED)
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["lastSnapshotDate"] == _date.today().isoformat()
+    assert perf["snapshotSkippedOn"] is None
+    assert perf["snapshotSkippedContracts"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_status_after_a_skip_day(client_with_session):
+    client, Session = client_with_session
+    await _seed_skip_day_state(Session)
+    await _read_portfolio(client, _OPT_UNQUOTED)
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["lastSnapshotDate"] == "2026-10-23"
+    assert perf["snapshotSkippedOn"] == _date.today().isoformat()
+    assert perf["snapshotSkippedContracts"] == [_OPT]
+    assert perf["openPnlCurve"] == [{"date": "2026-10-23", "value": 1530.0}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_skip_cleared_by_a_later_write(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    await _read_portfolio(client, _OPT_UNQUOTED)
+    await _read_portfolio(client, _ALL_QUOTED)
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["snapshotSkippedOn"] is None
+    assert perf["snapshotSkippedContracts"] == []
+    assert perf["lastSnapshotDate"] == _date.today().isoformat()
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_skip_after_a_write_same_day(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    await _read_portfolio(client, _ALL_QUOTED)
+    await _read_portfolio(client, _OPT_UNQUOTED)
+    perf = (await client.get("/api/portfolio/performance")).json()
+    today = _date.today().isoformat()
+    assert perf["lastSnapshotDate"] == today
+    assert perf["snapshotSkippedOn"] == today
+    assert perf["snapshotSkippedContracts"] == [_OPT]
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_skip_lists_every_unquoted_contract(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    rows = await _read_portfolio(client, _NONE_QUOTED)
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["snapshotSkippedContracts"] == [p["contract"] for p in rows]
+    assert sorted(perf["snapshotSkippedContracts"]) == sorted([_OPT, _STK])
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_snapshot_skip_cleared_when_no_positions_remain(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    await _read_portfolio(client, _OPT_UNQUOTED)
+    assert (await client.get("/api/portfolio/performance")).json()["snapshotSkippedOn"] is not None
+    async with Session() as s:
+        await s.execute(delete(PortfolioPositionModel))
+        await s.commit()
+    assert await _read_portfolio(client, _OPT_UNQUOTED) == []
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["snapshotSkippedOn"] is None
+    assert perf["snapshotSkippedContracts"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("reset_snapshot_skip")
+async def test_performance_existing_fields_unchanged(client_with_session):
+    client, Session = client_with_session
+    await _seed_skip_day_state(Session)
+    await _read_portfolio(client, _OPT_UNQUOTED)
+    perf = (await client.get("/api/portfolio/performance")).json()
+    old_keys = {"realizedToday", "realizedWeek", "realizedMonth", "realizedYear",
+                "realizedCurve", "equityCurve", "openPnlCurve"}
+    new_keys = {"lastSnapshotDate", "snapshotSkippedOn", "snapshotSkippedContracts"}
+    assert set(perf) == old_keys | new_keys
+    assert {k: perf[k] for k in old_keys} == {
+        "realizedToday": 0.0, "realizedWeek": 0.0, "realizedMonth": 0.0, "realizedYear": 0.0,
+        "realizedCurve": [],
+        "equityCurve": [{"date": "2026-10-23", "value": 41170.0}],
+        "openPnlCurve": [{"date": "2026-10-23", "value": 1530.0}],
+    }
