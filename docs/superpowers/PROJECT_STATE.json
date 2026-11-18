@@ -11232,12 +11232,12 @@
     {
       "id": "TEXT-CONTRAST-AA",
       "name": "WCAG AA text colour tokens (dark + light), text-only status tokens, grey non-text pins",
-      "status": "not_started",
+      "status": "built",
       "tracking_issue": 659,
       "branch": "board/text-contrast-aa-58bf2d7a",
       "size": "M",
       "complexity": 2,
-      "completion_pct": 20,
+      "completion_pct": 70,
       "plan": "docs/superpowers/plans/2026-11-17-text-contrast-aa-plan.md",
       "audit_rounds": 1,
       "audit_clean": false,
@@ -11263,14 +11263,32 @@
         "pattern": "--text-reject:",
         "note": "Presence of the text-only reject token only; not proof of contrast, audit or merge."
       },
-      "note": "2026-11-17: taken from board item #659 on Kenneth's instruction (umbrella #656 row 72). Plan round 1 by fresh gate-auditor: 0 gate findings, clean. No #657/#658 file is edited (plan s4).",
+      "note": "2026-11-19: T1 #670 (a88ce42a) and T2 #671 (e1a949fe) built. origin/main still 8268d4c7 (merge: already up to date). Integrated checks at e1a949fe: typecheck clean; full frontend jest --maxWorkers=2 356/356 suites, 6559/6559 tests; text_contrast.py measure exit 0 (every --text-* >= 4.5 in both themes). Before/after screenshots committed (0d54b0e9, 59de3e29). Plan round 1 clean; code audit pending. No #657/#658 file edited.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
         "closed_by": "clean",
         "reviewer": "text_contrast_plan_audit_1",
         "plan_sha256": "ac734765050cdf63446f5ca00e82ebd3b304338173692b65f87f5bc7bac49bf1"
-      }
+      },
+      "build_tickets": [
+        {
+          "issue": 670,
+          "task": "T1",
+          "status": "done",
+          "completion_pct": 70,
+          "commit": "a88ce42a",
+          "validation_note": "RED 38/48 as predicted; typecheck clean; styles tests 48/48; full suite step-7 timeouts only under load, pass in band with --testTimeout=30000. Not a code audit."
+        },
+        {
+          "issue": 671,
+          "task": "T2",
+          "status": "done",
+          "completion_pct": 70,
+          "commit": "e1a949fe",
+          "validation_note": "RED 147 CSS + settings rows as predicted; 153 changed line pairs all same-role color: switches (coordinator script); typecheck clean; guard tests 51/51. Not a code audit."
+        }
+      ]
     }
   ],
   "already_shipped": [
