@@ -22,8 +22,12 @@ function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosi
   };
 }
 
+// The contract cell shows a readable label; the raw key is its `title`
+// (PORTFOLIO-NUMBERS T3), so the row is found through that attribute.
 function rowOf(contract: string): HTMLElement {
-  return screen.getByText(contract).closest('[role="row"]') as HTMLElement;
+  const el = document.body.querySelector(`[title="${contract}"]`);
+  if (!el) throw new Error(`no element titled ${contract}`);
+  return el.closest('[role="row"]') as HTMLElement;
 }
 
 function renderWith(positions: PortfolioPosition[]) {
@@ -70,6 +74,7 @@ describe('Portfolio open positions without a quote', () => {
     const footer = screen.getByText('Deployed').parentElement!.parentElement!;
     expect(within(footer).getByText('$120')).toBeInTheDocument();     // 1.20 x 100 only
     expect(within(footer).getByText('+$20')).toBeInTheDocument();
+    expect(within(footer).getByText('Return on cost')).toBeInTheDocument();
     expect(within(footer).getByText('Excludes 1 position without a quote')).toBeInTheDocument();
   });
 });

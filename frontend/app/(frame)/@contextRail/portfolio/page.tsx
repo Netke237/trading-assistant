@@ -1,5 +1,6 @@
 /*
  * Portfolio right-rail. Spec §4: Aggregate Greeks / risk summary.
+ * Greeks are summed per position as θ/Δ × multiplier × contracts (theta in dollars per day).
  */
 
 'use client';
@@ -11,7 +12,8 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
 import { Text, Data } from '@/components/primitives';
-import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
+import { openTotals, unquotedNote, aggregateGreeks, deltaDollarsNote } from '@/lib/portfolioTotals';
+import { formatMoney, moneyTone } from '@/lib/portfolioFormat';
 import styles from './page.module.css';
 
 export default function PortfolioContextRail() {
@@ -29,23 +31,18 @@ export default function PortfolioContextRail() {
   // Positions without a quote are left out of the totals (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, unquoted } = openTotals(positions);
   const note = unquotedNote(unquoted);
-  const hasGreeks = positions.some((p) => p.delta != null || p.theta != null);
-  const aggDelta = hasGreeks
-    ? positions.reduce((s, p) => s + (p.delta ?? 0) * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0).toFixed(2)
-    : null;
-  const aggTheta = hasGreeks
-    ? positions.reduce((s, p) => s + (p.theta ?? 0) * (p.contracts ?? 1), 0).toFixed(1)
-    : null;
+  const { deltaShares, thetaDollars, deltaDollars, deltaDollarsExcluded } = aggregateGreeks(positions);
+  const ddNote = deltaShares != null ? deltaDollarsNote(deltaDollarsExcluded) : null;
 
   return (
     <>
       <RailSection title="Totals">
         <div className={styles.statStack}>
-          <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
+          <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>{formatMoney(deployed)}</Data></Row>
           <Row>
             <Text size={12} tone="secondary">Open P&amp;L</Text>
             <Data size={12} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
-              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+              {formatMoney(openPnL, { plus: true })}
             </Data>
           </Row>
           <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{positions.length}</Data></Row>
@@ -55,8 +52,15 @@ export default function PortfolioContextRail() {
 
       <RailSection title="Aggregate Greeks">
         <div className={styles.statStack}>
-          <Row><Text size={12} tone="secondary">Δ Delta</Text><Data size={12}>{aggDelta ?? '—'}</Data></Row>
-          <Row><Text size={12} tone="secondary">Θ Theta / day</Text><Data size={12} tone={aggTheta != null ? (parseFloat(aggTheta) < 0 ? 'reject' : 'pass') : undefined}>{aggTheta ?? '—'}</Data></Row>
+          <Row><Text size={12} tone="secondary">Δ Delta (share-equiv.)</Text><Data size={12}>{deltaShares != null ? deltaShares.toFixed(2) : '—'}</Data></Row>
+          <Row><Text size={12} tone="secondary">Δ in dollars</Text><Data size={12}>{deltaDollars != null ? formatMoney(deltaDollars) : '—'}</Data></Row>
+          <Row>
+            <Text size={12} tone="secondary">Θ Theta / day</Text>
+            <Data size={12} tone={thetaDollars != null ? moneyTone(thetaDollars, 2) : undefined}>
+              {thetaDollars != null ? formatMoney(thetaDollars, { decimals: 2, plus: true }) : '—'}
+            </Data>
+          </Row>
+          {ddNote && <Text size={11} tone="caution">{ddNote}</Text>}
         </div>
       </RailSection>
 
