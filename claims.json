@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/portfolio-quote-gaps-8c0ac135",
       "claimed_at": "2026-11-18T21:15:37Z",
-      "expires_at": "2026-11-19T00:29:08Z",
+      "expires_at": "2026-11-19T02:23:37Z",
       "note": "Board #658 quote gaps + snapshot fields (resumed)",
       "task": "PORTFOLIO-QUOTE-GAPS"
     }
