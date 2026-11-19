@@ -10,6 +10,8 @@ parameter: no `active:` write, no `backend/config/*` edit, no `adopt()` call. Ad
 | Mon 2026-11-16 23:00 | Frozen export, end 2026-11-13 (2.6 min, read-only `SELECT`s in one snapshot) |
 | Mon 2026-11-16 23:10 | Probe on the frozen bars: **169.46 h at 3 workers** (upper bound) |
 | Tue 2026-11-17 | Kenneth approved the full run in chat. `run-j1.ps1` written. Kenneth registered the `Bamendjou J1 tuning` task from an elevated PowerShell; verified: daily 03:30 starting 2026-11-18 (first `NextRunTime` 2026-11-18 03:30), S4U, `Limited`, priority 7, no execution time limit, `IgnoreNew`, arguments `-WindowEnd 01:30 -Workers 3` |
+| Wed 11-18, Thu 11-19 03:30 | **Both sessions stopped before their first cell (2 days lost).** PowerShell variable names ignore case, so the wrapper's local `$windowEnd` was the `[string]` parameter `$WindowEnd`: the window end became the string "…01:30:00" of the same morning, and the crosses-midnight `AddDays(1)` never applied. Fixed in commit `7ff1b20c` (renamed to `$windowEndAt`), dry-tested with a stub in place of Python (a past window end rolls over to the next day; STOP and the too-long-cell guard still work) |
+| Thu 2026-11-19 06:27 | Frozen-bar hashes re-checked (0 differences) and the pinned worktree is clean at `d15620d8`. Today's session was started by hand (`Start-ScheduledTask`), window end Fri 11-20 01:30; 3 tuner processes at about 90 % CPU |
 | — | Run in progress: progress per cell is posted on #115 |
 
 ## Inputs (fixed for the whole run)
@@ -71,7 +73,9 @@ its `tuning_report.md`.
 
 1. Before each session, compare the export hashes (run-book §2): `Compare-Object` must print nothing.
 2. Watch progress (run-book §6): count `C:\bamendjou-tuning\runs\*\data\cells\*.json` (of 60) and tail the latest
-   `logs\j1-*.log`. Post progress per cell on #115.
+   `logs\j1-*.log`. Post progress per cell on #115. While a tuner call is running, its `Add-Content` pipeline holds
+   the log open, so `Get-Content` on it fails until that cell ends. Between cells the log reads normally; the cell
+   files are the reliable progress signal.
 3. Before any future MEAS day, disable `Bamendjou J1 tuning` the day before and enable it afterwards.
 4. When all 12 groups are done, copy each `runs\<strategy>-<Direction>\out\tuning_report.md` and
    `tuning_summary.json` here, open the docs PR, comment on #115 and release the claim `KENNETH-J1-TUNING-RUN`.
