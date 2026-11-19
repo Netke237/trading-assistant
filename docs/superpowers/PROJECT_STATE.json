@@ -11485,6 +11485,13 @@
         "closed_by": "clean",
         "reviewer": "portfolio_quote_gaps_code_audit_1 (fresh gate-auditor, bmad-review-adversarial-general)",
         "diff": "8268d4c73e6eff912652c12b967675e2a9d9bf67..e04559426aae0eb2f50b622cde392e2087cbf068"
+      },
+      "pr": 674,
+      "self_merge": {
+        "status": "pending",
+        "pr": 674,
+        "audited_head": "e04559426aae0eb2f50b622cde392e2087cbf068",
+        "note": "SELF-MERGE PENDING, PR #674, audited head e0455942 (code round 1 clean). Later commits: 276461c6 doc-only verdict record, c4aa8b09 origin/main merge whose only conflict was PROJECT_STATE.json (audited application files byte-identical to e0455942), and this pending record. Hold lifted by Kenneth's answer to Q1-Q3 ('yes to both', relayed 2026-11-19). Not merged; main record unchanged."
       }
     }
   ],
