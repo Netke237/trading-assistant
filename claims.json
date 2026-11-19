@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "board/portfolio-quote-gaps-8c0ac135",
+      "claimed_at": "2026-11-19T05:19:01Z",
+      "expires_at": "2026-11-19T08:19:01Z",
+      "note": "Board #658: record Kenneth's answers, BMY re-key, finish PR #674",
+      "task": "PORTFOLIO-QUOTE-GAPS"
+    }
+  ]
 }
