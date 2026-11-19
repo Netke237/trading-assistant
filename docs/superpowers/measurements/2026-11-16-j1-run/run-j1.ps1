@@ -33,10 +33,10 @@ $SwingShare = 51.0 / 169.0     # folds: Swing 51 of 169 in total, the largest ce
 New-Item -ItemType Directory -Force -Path "$Root\logs" | Out-Null
 Set-Location "$Root\code"      # the pinned worktree; never the development checkout
 $Log = Join-Path "$Root\logs" ("j1-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
-$windowEnd = [datetime]::Today.Add([timespan]::Parse($WindowEnd))
-if ($windowEnd -lt (Get-Date)) { $windowEnd = $windowEnd.AddDays(1) }   # window crosses midnight
+$windowEndAt = [datetime]::Today.Add([timespan]::Parse($WindowEnd))
+if ($windowEndAt -lt (Get-Date)) { $windowEndAt = $windowEndAt.AddDays(1) }   # window crosses midnight
 $env:PYTHONUTF8 = "1"
-Add-Content -Path $Log ("session start {0:yyyy-MM-dd HH:mm}, window end {1:yyyy-MM-dd HH:mm}, workers {2}" -f (Get-Date), $windowEnd, $Workers)
+Add-Content -Path $Log ("session start {0:yyyy-MM-dd HH:mm}, window end {1:yyyy-MM-dd HH:mm}, workers {2}" -f (Get-Date), $windowEndAt, $Workers)
 
 function Get-CellHours([string]$Item, [string]$Run) {
     $longest = $GroupHours[$Item] * $SwingShare
@@ -61,8 +61,8 @@ foreach ($item in $Queue) {
         if (Test-Path "$run\data\cells\${strategy}__${direction}__$h.json") { continue }   # finished
         if (Test-Path "$Root\STOP") { Add-Content -Path $Log "STOP file present: stopping between cells"; exit 0 }
         $need = Get-CellHours $item $run
-        if ((Get-Date).AddHours($need) -gt $windowEnd) {
-            Add-Content -Path $Log ("{0} {1} {2} needs up to {3:N1} h, window ends {4:HH:mm}: stopping between cells" -f $strategy, $direction, $h, $need, $windowEnd)
+        if ((Get-Date).AddHours($need) -gt $windowEndAt) {
+            Add-Content -Path $Log ("{0} {1} {2} needs up to {3:N1} h, window ends {4:HH:mm}: stopping between cells" -f $strategy, $direction, $h, $need, $windowEndAt)
             exit 0
         }
         Add-Content -Path $Log ("{0:HH:mm} start {1} {2} {3} (allowing {4:N1} h)" -f (Get-Date), $strategy, $direction, $h, $need)
