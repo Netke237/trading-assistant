@@ -35,7 +35,7 @@
   overflow-wrap: anywhere;
 }
 
-.pass { color: var(--pass); }
-.caution { color: var(--caution); }
-.reject { color: var(--reject); }
+.pass { color: var(--text-pass); }
+.caution { color: var(--text-caution); }
+.reject { color: var(--text-reject); }
 .secondary { color: var(--text-primary); }

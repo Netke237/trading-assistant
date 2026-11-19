@@ -183,7 +183,7 @@
 }
 
 .swatchNeither {
-  background: color-mix(in srgb, var(--text-dim) 35%, var(--bg-surface));
+  background: color-mix(in srgb, var(--graphic-dim) 35%, var(--bg-surface));
 }
 
 /* ── Printed arithmetic chains ────────────────────────────────────────────── */
@@ -257,7 +257,7 @@
 
 .selectTarget[aria-pressed='true'] {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .selectTarget:focus-visible {

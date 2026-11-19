@@ -13,25 +13,25 @@
 
 .pass {
   border-left-color: var(--pass);
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .caution {
   border-left-color: var(--caution);
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .reject {
   border-left-color: var(--reject);
-  color: var(--reject);
+  color: var(--text-reject);
 }
 
 .pending {
-  border-left-color: var(--text-dim);
+  border-left-color: var(--graphic-dim);
   color: var(--text-secondary);
 }
 
 .noData {
-  border-left-color: var(--text-dim);
+  border-left-color: var(--graphic-dim);
   color: var(--text-secondary);
 }

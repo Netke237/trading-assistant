@@ -71,7 +71,7 @@
   width: max-content;
 }
 
-.typeTrade { color: var(--accent);  background: var(--accent-dim); }
+.typeTrade { color: var(--text-accent);  background: var(--accent-dim); }
 .typeNote  { color: var(--text-secondary); background: var(--bg-surface-2); }
 
 .statusOpen,
@@ -85,7 +85,7 @@
   width: max-content;
 }
 
-.statusOpen   { color: var(--pass);   background: var(--pass-bg); }
+.statusOpen   { color: var(--text-pass);   background: var(--pass-bg); }
 .statusClosed { color: var(--text-secondary); background: var(--bg-surface-2); }
 
 .deleteBtn {
@@ -98,7 +98,7 @@
   padding: 2px 4px;
 }
 
-.deleteBtn:hover { color: var(--reject); }
+.deleteBtn:hover { color: var(--text-reject); }
 
 .empty {
   display: flex;

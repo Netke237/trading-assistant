@@ -14,7 +14,7 @@
 
 /* Copied from the Options pages' "How this page works" (step-7-trade-card). */
 .pageExplanation { font-size: 12px; color: var(--text-secondary); }
-.pageExplanation > summary { cursor: pointer; color: var(--accent); }
+.pageExplanation > summary { cursor: pointer; color: var(--text-accent); }
 .pageExplanation[open] > summary { margin-bottom: var(--space-2); }
 .directionBanner {
   padding: 10px 14px;
@@ -34,9 +34,9 @@
 .cardBody { display: flex; flex-direction: column; gap: 2px; }
 
 .regimeBadge { align-self: flex-start; padding: 1px 6px; border-radius: 4px; font-size: 10px; margin-top: 2px; }
-.regimeBadgePass    { background: color-mix(in srgb, var(--pass) 18%, var(--bg-surface));    color: var(--pass); }
-.regimeBadgeCaution { background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface)); color: var(--caution); }
-.regimeBadgeReject  { background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));  color: var(--reject); }
+.regimeBadgePass    { background: color-mix(in srgb, var(--pass) 18%, var(--bg-surface));    color: var(--text-pass); }
+.regimeBadgeCaution { background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface)); color: var(--text-caution); }
+.regimeBadgeReject  { background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));  color: var(--text-reject); }
 
 .runRow { display: flex; gap: 12px; align-items: center; }
 .runBtn {

@@ -101,8 +101,8 @@
   width: max-content;
 }
 
-.dirBull { color: var(--pass);   background: var(--pass-bg);   }
-.dirBear { color: var(--reject); background: var(--reject-bg); }
+.dirBull { color: var(--text-pass);   background: var(--pass-bg);   }
+.dirBear { color: var(--text-reject); background: var(--reject-bg); }
 
 .tabs {
   display: inline-flex;

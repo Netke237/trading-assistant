@@ -32,7 +32,7 @@
 
 /* status variants */
 .open {
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .dim {

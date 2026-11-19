@@ -9,6 +9,6 @@
 .selected .td:first-child { border-left: 3px solid var(--accent); }
 .empty { padding: 16px; text-align: center; }
 .inspect { font-size: 11px; padding: 4px 8px; color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); cursor: pointer; }
-.inspect:hover { border-color: var(--accent); color: var(--accent); }
+.inspect:hover { border-color: var(--accent); color: var(--text-accent); }
 .inspect:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .wrapCell { white-space: normal; min-width: 120px; }

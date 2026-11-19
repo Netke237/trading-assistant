@@ -146,7 +146,7 @@
   padding: 3px var(--space-3);
   font-size: 11px;
   font-family: var(--font-dm);
-  color: var(--caution);
+  color: var(--text-caution);
   background: color-mix(in srgb, var(--caution) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--caution) 35%, transparent);
   border-radius: var(--radius-sm);
@@ -177,7 +177,7 @@
 .inspectLinkBtn {
   background: transparent;
   border: none;
-  color: var(--accent);
+  color: var(--text-accent);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -186,7 +186,7 @@
 }
 
 .inspectLinkBtn:hover {
-  color: var(--accent-hover);
+  color: var(--text-accent-hover);
 }
 
 
@@ -354,7 +354,7 @@
 .meterFill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: var(--text-dim);
+  background: var(--graphic-dim);
   border-radius: 2px;
   transition: width 180ms ease-out;
 }
