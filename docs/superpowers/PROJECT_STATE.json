@@ -11321,12 +11321,12 @@
     {
       "id": "TEXT-CONTRAST-AA",
       "name": "WCAG AA text colour tokens (dark + light), text-only status tokens, grey non-text pins",
-      "status": "built",
+      "status": "shipped",
       "tracking_issue": 659,
       "branch": "board/text-contrast-aa-58bf2d7a",
       "size": "M",
       "complexity": 2,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "plan": "docs/superpowers/plans/2026-11-17-text-contrast-aa-plan.md",
       "audit_rounds": 2,
       "audit_clean": true,
@@ -11365,7 +11365,7 @@
         "pattern": "--text-reject:",
         "note": "Presence of the text-only reject token only; not proof of contrast, audit or merge."
       },
-      "note": "2026-11-19: T1 #670 (a88ce42a) and T2 #671 (e1a949fe) built. origin/main still 8268d4c7 (merge: already up to date). Integrated checks at e1a949fe: typecheck clean; full frontend jest --maxWorkers=2 356/356 suites, 6559/6559 tests; text_contrast.py measure exit 0 (every --text-* >= 4.5 in both themes). Before/after screenshots committed (0d54b0e9, 59de3e29). Plan round 1 clean; code round 1 (continuous round 2) by fresh gate-auditor text_contrast_code_audit_1 over 8268d4c7..6dc3972c: 0 gate findings, clean; audit_clean true. No #657/#658 file edited.",
+      "note": "2026-11-19: T1 #670 (a88ce42a) and T2 #671 (e1a949fe) built. origin/main still 8268d4c7 (merge: already up to date). Integrated checks at e1a949fe: typecheck clean; full frontend jest --maxWorkers=2 356/356 suites, 6559/6559 tests; text_contrast.py measure exit 0 (every --text-* >= 4.5 in both themes). Before/after screenshots committed (0d54b0e9, 59de3e29). Plan round 1 clean; code round 1 (continuous round 2) by fresh gate-auditor text_contrast_code_audit_1 over 8268d4c7..6dc3972c: 0 gate findings, clean; audit_clean true. No #657/#658 file edited. Merged 2026-11-19 as 861c82d1; merged tree 194a907a is identical to the tested head 6d01a8db (local typecheck clean, jest 359/359 suites, 6596/6596 tests; CI green), which is the post-merge regression record.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -11406,7 +11406,7 @@
         "Text on --bg-surface-2/3 and on coloured fills not measured (plan s11)."
       ],
       "pr": 676,
-      "self_merge": "SELF-MERGE PENDING, PR #676, audited head 6dc3972c (code round 1 clean over 8268d4c7..6dc3972c); later commits are doc-only records (fcd57abe verdict, this pending record). main record: 8268d4c7. Not merged; not shipped."
+      "self_merge": "Self-merged via PR #676 at 861c82d1d3f3182fcc183263a4eb84aceefe8ff4 (2026-11-19T00:00:37Z), --match-head-commit 6d01a8db; all board.md step 7 conditions verified: own PR and claim, no hold/needs-kenneth/blocked, plan stage clean 1/3 and code stage clean 1/3, only doc records after audited head 6dc3972c plus one origin/main merge (70c6f556) whose only conflict was PROJECT_STATE.json, MERGEABLE, CI backend/frontend/test SUCCESS on 6d01a8db."
     }
   ],
   "already_shipped": [
