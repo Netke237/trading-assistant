@@ -57,7 +57,7 @@
 
 .fill {
   height: 100%;
-  background: var(--text-secondary);
+  background: var(--graphic-secondary);
 }
 
 .caution .fill { background: var(--caution); }

@@ -181,7 +181,7 @@ export function CandlestickChart({
     const candle = candleSeriesRef.current;
     if (!candle || chartVersion === 0) return;
     const lines = JSON.parse(priceLinesKey) as {price: number; title: string}[];
-    const color = token('--accent') || token('--text-secondary') || '#787B86';
+    const color = token('--accent') || token('--graphic-secondary') || '#787B86';
     priceLineHandles.current = lines.map(({price, title}) => candle.createPriceLine({
       price, title, color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
     }));

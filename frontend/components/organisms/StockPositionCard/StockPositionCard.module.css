@@ -157,10 +157,10 @@
 .raceDrawing meter::-webkit-meter-bar { background: var(--bg-surface); border-color: var(--border-subtle); }
 .raceTarget::-webkit-meter-optimum-value { background: var(--pass); }
 .raceStop::-webkit-meter-optimum-value { background: var(--reject); }
-.raceNeither::-webkit-meter-optimum-value { background: var(--text-dim); }
+.raceNeither::-webkit-meter-optimum-value { background: var(--graphic-dim); }
 .raceTarget::-moz-meter-bar { background: var(--pass); }
 .raceStop::-moz-meter-bar { background: var(--reject); }
-.raceNeither::-moz-meter-bar { background: var(--text-dim); }
+.raceNeither::-moz-meter-bar { background: var(--graphic-dim); }
 .workspace .planRace .planRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .workspace .planRace .planRow > :first-child { grid-column: 1 / -1; }
 

@@ -110,12 +110,12 @@
 
 .badgePass {
   background: color-mix(in srgb, var(--pass) 20%, var(--bg-surface));
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .badgeReject {
   background: color-mix(in srgb, var(--reject) 20%, var(--bg-surface));
-  color: var(--reject);
+  color: var(--text-reject);
 }
 
 .logRow {
@@ -320,7 +320,7 @@
 
 .toggleOn {
   border-color: var(--pass-border);
-  color: var(--pass);
+  color: var(--text-pass);
   background: var(--pass-bg);
 }
 
@@ -453,7 +453,7 @@
 
 .overrideBadge {
   background: color-mix(in srgb, var(--accent) 15%, var(--bg-surface));
-  color: var(--accent);
+  color: var(--text-accent);
   font-size: 10px;
   padding: 1px 6px;
   border-radius: var(--radius-sm);

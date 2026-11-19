@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import type { PortfolioPosition } from '@/types/domain';
 import { positionMultiplier } from '@/lib/risk';
+import { formatMoney, formatSignedPct, readableContract } from '@/lib/portfolioFormat';
 import styles from './ClosePositionDrawer.module.css';
 
 interface Props {
@@ -56,7 +57,7 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
   return (
     <div className={styles.drawer}>
       <div className={styles.header}>
-        <Text size={12} weight={400}>Close {position.contract}</Text>
+        <span title={position.contract}><Text size={12} weight={400}>Close {position.symbol} {readableContract(position.contract)}</Text></span>
         <button type="button" className={styles.close} onClick={onCancel} aria-label="Cancel close">×</button>
       </div>
 
@@ -95,8 +96,8 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
         <div className={styles.field}>
           <Text size={11} tone="secondary">Realized P&L</Text>
           <Data size={16} weight={500} tone={tone}>
-            {realizedDollar > 0 ? '+' : ''}${realizedDollar}
-            {'  '}({realizedPct > 0 ? '+' : ''}{realizedPct.toFixed(1)}%)
+            {formatMoney(realizedDollar, { plus: true })}
+            {'  '}({formatSignedPct(realizedPct, 1)})
           </Data>
         </div>
       </div>

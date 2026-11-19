@@ -214,5 +214,5 @@
 
 .reviewDetails > summary {
   cursor: pointer;
-  color: var(--accent);
+  color: var(--text-accent);
 }

@@ -138,7 +138,7 @@ function Evidence({artifact}:{artifact:BacktestArtifact}) {
   const markerPoints=():SeriesMarker<Time>[]=>{
    const {markersOn:on,selected:chosen}=display.current;
    if(!on)return [];
-   const accent=token('--accent'),muted=token('--text-secondary');
+   const accent=token('--accent'),muted=token('--graphic-secondary');
    return fills.filter(f=>f.candleTime!==null).map(f=>({id:f.id,time:f.candleTime as UTCTimestamp,position:'atPriceMiddle',price:f.price,
     shape:f.kind==='exit'?'square':f.direction==='Bearish'?'arrowDown':'arrowUp',color:f.kind==='entry'?accent:muted,
     size:f.source==='trade'&&f.tradeId===chosen?1.6:0.8}));

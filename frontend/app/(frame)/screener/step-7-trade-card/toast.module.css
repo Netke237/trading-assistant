@@ -23,7 +23,7 @@
 }
 
 .link {
-  color: var(--accent);
+  color: var(--text-accent);
   font-family: var(--font-dm);
   font-size: 12px;
   font-weight: 500;

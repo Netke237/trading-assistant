@@ -53,13 +53,13 @@ export function IndicatorPanel({ chart, data, type }: IndicatorPanelProps) {
 
       series.createPriceLine({
         price: 30,
-        color: token('--text-dim') || '#434651',
+        color: token('--graphic-dim') || '#434651',
         lineWidth: 1,
         lineStyle: 2,
       });
       series.createPriceLine({
         price: 70,
-        color: token('--text-dim') || '#434651',
+        color: token('--graphic-dim') || '#434651',
         lineWidth: 1,
         lineStyle: 2,
       });
@@ -81,7 +81,7 @@ export function IndicatorPanel({ chart, data, type }: IndicatorPanelProps) {
         lastValueVisible: false,
       });
       const histSeries = pane.addSeries(HistogramSeries, {
-        color: token('--text-secondary') || '#787B86',
+        color: token('--graphic-secondary') || '#787B86',
         priceLineVisible: false,
         lastValueVisible: false,
       });
