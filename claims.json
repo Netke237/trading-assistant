@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/text-contrast-aa-58bf2d7a",
-      "claimed_at": "2026-11-18T21:15:31Z",
-      "expires_at": "2026-11-19T03:01:39Z",
-      "note": "Board #659 text contrast AA tokens (resume)",
-      "task": "TEXT-CONTRAST-AA"
-    }
-  ]
+  "claims": []
 }
