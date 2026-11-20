@@ -2,11 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/j1-tuning-run-0f281a",
-      "claimed_at": "2026-11-19T05:25:42Z",
-      "expires_at": "2026-11-19T08:25:42Z",
-      "note": "J1 run: fix wrapper window-end bug, restart",
-      "task": "KENNETH-J1-TUNING-RUN"
+      "branch": "board/portfolio-quote-gaps-8c0ac135",
+      "claimed_at": "2026-11-20T06:41:25Z",
+      "expires_at": "2026-11-20T09:41:25Z",
+      "note": "Board #658: self-merge PR #674 + state follow-up",
+      "task": "PORTFOLIO-QUOTE-GAPS"
     }
   ]
 }
