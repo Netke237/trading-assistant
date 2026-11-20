@@ -15,6 +15,11 @@ import type { PremiumStopSide } from './premiumStop';
  *  (`app/(frame)/alerts/page.tsx`). Change all three together. */
 export const TIME_STOP_DTE = 3;
 
+/** The Portfolio status badge flags a position CAUTION when the underlying is
+ *  within this fraction of its stop or structural stop (on the safe side).
+ *  Not an alert threshold and not a user setting; lib/positionStatus.ts reads it. */
+export const STOP_PROXIMITY_PCT = 0.02;
+
 export interface AlertPosition {
   recId: string;
   symbol: string;
