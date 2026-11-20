@@ -11513,7 +11513,7 @@
         "pattern": "export function derivePositionStatus",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-20 built: tickets #679-#682 closed; plan audit 2 rounds clean; code round 1 clean (0 gate findings) at 55472baf. Local: typecheck ok; portfolio/lib suites pass; implementer full runs green (T4 run: 4 unrelated screener suites timed out under load, pass --runInBand). Logged below gate: positionRange.fraction null when T1 missing/equal stop (bar drawn open).",
+      "note": "2026-11-20 built: tickets #679-#682 closed; plan audit 2 rounds clean; code round 1 clean (0 gate findings) at 55472baf. Local: typecheck ok; portfolio/lib suites pass; implementer full runs green (T4 run: 4 unrelated screener suites timed out under load, pass --runInBand). Logged below gate: positionRange.fraction null when T1 missing/equal stop (bar drawn open). SELF-MERGE PENDING, PR #683, audited head 55472baf (pending is not shipped).",
       "plan_stage": {
         "rounds": 2,
         "clean": true,
