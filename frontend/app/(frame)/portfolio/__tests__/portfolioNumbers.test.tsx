@@ -42,9 +42,9 @@ function rowOf(container: HTMLElement, contract: string): HTMLElement {
   return el.closest('[role="row"]') as HTMLElement;
 }
 
-/** The Θ $/DAY cell: the 10th grid track of an open-positions row. */
+/** The Δ · Θ $/DAY cell: the 8th grid track of an open-positions row. */
 function thetaCell(row: HTMLElement): HTMLElement {
-  return row.children[9] as HTMLElement;
+  return row.children[7] as HTMLElement;
 }
 
 describe('Portfolio page numbers (PORTFOLIO-NUMBERS T3)', () => {
@@ -70,18 +70,18 @@ describe('Portfolio page numbers (PORTFOLIO-NUMBERS T3)', () => {
 
   it('Θ column is theta in dollars per day', () => {
     const { container } = renderWith(portfolio20261117());
-    expect(screen.getByText('Θ $/DAY')).toBeInTheDocument();
+    expect(screen.getByText('Δ · Θ $/DAY')).toBeInTheDocument();
     expect(screen.queryByText('Θ/DAY')).not.toBeInTheDocument();
-    expect(thetaCell(rowOf(container, 'CMG|40|2027-06-17|C'))).toHaveTextContent(/^−\$1\.10$/);
-    expect(thetaCell(rowOf(container, 'NCLH|20|2027-06-17|C'))).toHaveTextContent(/^−\$0\.71$/);
-    expect(thetaCell(rowOf(container, 'BMY|67|2027-03-19|C'))).toHaveTextContent(/^—$/);
+    expect(thetaCell(rowOf(container, 'CMG|40|2027-06-17|C'))).toHaveTextContent(/^0\.45 · −\$1\.10$/);
+    expect(thetaCell(rowOf(container, 'NCLH|20|2027-06-17|C'))).toHaveTextContent(/^0\.48 · −\$0\.71$/);
+    expect(thetaCell(rowOf(container, 'BMY|67|2027-03-19|C'))).toHaveTextContent(/^— · —$/);
   });
 
   it('a positive-theta row shows a plus sign', () => {
     const { container } = renderWith([{
       ...portfolio20261117()[0], theta: 0.02, contracts: 1,
     }]);
-    expect(thetaCell(rowOf(container, 'CMG|40|2027-06-17|C'))).toHaveTextContent(/^\+\$2\.00$/);
+    expect(thetaCell(rowOf(container, 'CMG|40|2027-06-17|C'))).toHaveTextContent(/^0\.45 · \+\$2\.00$/);
   });
 
   it('footer: deployed, open P&L, return on cost and theta per day', () => {

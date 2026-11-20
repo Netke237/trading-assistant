@@ -18,7 +18,14 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  /* Scroll sideways inside the card below the table's min width. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Shared by header, body and footer so the columns line up while scrolling. */
+.minW {
+  min-width: 1290px;
 }
 
 .tableHeader {
@@ -680,4 +687,85 @@
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+}
+
+/* ---------- Risk view cells (PORTFOLIO-RISK-VIEW T3) ---------- */
+
+.rowSelect {
+  cursor: pointer;
+}
+
+.rowSelect:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.symbolCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.statusCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rangeCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Low price left, high price right. The end caps are the stop and T1; the
+   facts are repeated as text under the bar, so colour is never the only cue. */
+.rangeBar,
+.rangeBarOpen {
+  position: relative;
+  height: 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.rangeBar {
+  border-left: 3px solid var(--reject);
+  border-right: 3px solid var(--pass);
+}
+
+/* No T1: the bar has no right end. */
+.rangeBarOpen {
+  border-left: 3px solid var(--reject);
+  border-right: 1px dashed var(--border-subtle);
+}
+
+.rangeStruct {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0;
+  border-left: 2px dotted var(--caution);
+  transform: translateX(-1px);
+}
+
+.rangeMarker,
+.rangeMarkerPinned {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 12px;
+  background: var(--text-primary);
+  transform: translateX(-50%);
+}
+
+/* At an end of the bar: the level is reached or passed. A wider marker with a
+   ring marks it without relying on colour. */
+.rangeMarkerPinned {
+  width: 5px;
+  outline: 2px solid var(--bg-surface);
 }

@@ -52,10 +52,9 @@ export function positionRange(p: PortfolioPosition): PositionRange | null {
     pinned = raw <= 0 ? 'left' : raw >= 1 ? 'right' : null;
   }
 
-  const money = (n: number) => '$' + n.toFixed(2);
-  const parts = [`stop ${money(stop)} ${formatSignedPct(pct(stop))}`];
-  if (structural != null) parts.push(`struct ${money(structural)} ${formatSignedPct(pct(structural))}`);
-  if (t1 != null) parts.push(`T1 ${money(t1)} ${formatSignedPct(pct(t1))}`);
+  const parts = [`$${underlying.toFixed(2)}`, `stop ${formatSignedPct(pct(stop))}`];
+  if (structural != null) parts.push(`struct ${formatSignedPct(pct(structural))}`);
+  if (t1 != null) parts.push(`T1 ${formatSignedPct(pct(t1))}`);
 
   return {
     stop,

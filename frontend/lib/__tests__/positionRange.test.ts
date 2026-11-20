@@ -20,7 +20,7 @@ describe('positionRange', () => {
     expect(r.stopPct).toBeCloseTo(-10, 6);
     expect(r.structPct).toBeCloseTo(-5, 6);
     expect(r.t1Pct).toBeCloseTo(20, 6);
-    expect(r.text).toBe('stop $90.00 −10.0% · struct $95.00 −5.0% · T1 $120.00 +20.0%');
+    expect(r.text).toBe('$100.00 · stop −10.0% · struct −5.0% · T1 +20.0%');
   });
   it('bearish mirrors: T1 at the low (left) end, stop at the high (right) end', () => {
     const r = positionRange(opt({ direction: 'Bearish', stop: 110, structuralStop: 105, targets: [{ stockPrice: 80 } as never] }))!;
