@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/tuner-recheck-window-03e0fc95",
-      "claimed_at": "2026-11-20T21:58:34Z",
-      "expires_at": "2026-11-21T00:58:34Z",
-      "note": "board item 660",
-      "task": "PORTFOLIO-RISK-VIEW"
-    }
-  ]
+  "claims": []
 }
