@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/j1-tuning-run-0f281a",
+      "claimed_at": "2026-11-20T07:11:57Z",
+      "expires_at": "2026-11-20T10:11:57Z",
+      "note": "J1 run: wrapper paired-cell fix",
+      "task": "KENNETH-J1-TUNING-RUN"
+    }
+  ]
 }
