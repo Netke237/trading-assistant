@@ -98,3 +98,31 @@ describe('deltaDollarsNote', () => {
     expect(deltaDollarsNote(2)).toBe('Δ in dollars excludes 2 positions without delta or underlying price');
   });
 });
+
+// PORTFOLIO-RISK-VIEW T2 (#680)
+import { riskAtStopTotal } from '../portfolioTotals';
+import type { ExitPlan } from '@/types/domain';
+
+describe('riskAtStopTotal', () => {
+  const plan = (c: number) => ({ stop: { contractPrice: c } }) as unknown as ExitPlan;
+  it('gives $414 with 1 unpriced for the 2026-11-17 set (BMY has no exit plan)', () => {
+    const [cmg, nclh, bmy] = portfolio20261117();
+    const t = riskAtStopTotal([{ ...cmg, exitPlan: plan(0.84) }, { ...nclh, exitPlan: plan(0.33) }, bmy]);
+    expect(t.total).toBeCloseTo(414, 6);
+    expect(t.priced).toBe(2);
+    expect(t.unpriced).toBe(1);
+  });
+  it('prices a row regardless of quote', () => {
+    const [, , bmy] = portfolio20261117();
+    const t = riskAtStopTotal([{ ...bmy, exitPlan: plan(2.78) }]);
+    expect(t.total).toBeCloseTo(300, 6);
+    expect([t.priced, t.unpriced]).toEqual([1, 0]);
+  });
+  it('multiplies by contracts', () => {
+    const [cmg] = portfolio20261117();
+    expect(riskAtStopTotal([{ ...cmg, contracts: 2, exitPlan: plan(0.84) }]).total).toBeCloseTo(412, 6);
+  });
+  it('is zero with nothing priced', () => {
+    expect(riskAtStopTotal([])).toEqual({ total: 0, priced: 0, unpriced: 0 });
+  });
+});
