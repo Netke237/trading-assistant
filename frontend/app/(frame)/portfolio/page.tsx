@@ -33,8 +33,14 @@ import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
-import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars } from '@/lib/portfolioTotals';
-import { formatMoney, formatSignedPct, readableContract, moneyTone } from '@/lib/portfolioFormat';
+import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAtStopTotal } from '@/lib/portfolioTotals';
+import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
+
+/** `−5.2%` / `+9.6%`, one decimal, Unicode minus. */
+function formatBreachPct(v: number): string {
+  const s = Math.abs(v).toFixed(1);
+  return Number(v.toFixed(1)) < 0 ? `${MINUS}${s}%` : `+${s}%`;
+}
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
@@ -196,6 +202,28 @@ export default function PortfolioPage() {
   // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
   const { thetaDollars } = aggregateGreeks(positions);
+  const riskTotal = riskAtStopTotal(positions);
+
+  // Stop-breach banners, derived each render: one per row whose derived breach
+  // is the underlying stop or the structural stop. breachPct is
+  // (underlying - level) / underlying, the OPPOSITE sign of positionRange.stopPct.
+  const breachBanners = positions.flatMap((p) => {
+    const { breach } = derivePositionStatus(p, { premiumStopPct });
+    if (breach !== 'stop' && breach !== 'structural') return [];
+    const underlying = p.contract.endsWith('|STOCK') ? p.currentPrice : (p.currentStockPrice ?? 0);
+    const level = breach === 'stop' ? p.stop : p.structuralStop;
+    if (level == null || !(underlying > 0)) return [];
+    const pct = ((underlying - level) / underlying) * 100;
+    const label = breach === 'stop' ? 'stop' : 'structural stop';
+    const text =
+      `${p.symbol} ${readableContract(p.contract)}: ${label} breached. ` +
+      `Underlying ${formatMoney(underlying, { decimals: 2 })} is ${p.direction === 'Bearish' ? 'above' : 'below'} ` +
+      `your ${label} ${formatMoney(level, { decimals: 2 })} (${formatBreachPct(pct)}).` +
+      (p.quoteUnavailable === true && !p.contract.endsWith('|STOCK')
+        ? ' The option has had no quote since the last sync, so its P&L and risk are unknown.'
+        : '');
+    return [{ contract: p.contract, symbol: p.symbol, text }];
+  });
 
   const now = new Date();
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -255,6 +283,24 @@ export default function PortfolioPage() {
           </button>
         </div>
       )}
+
+      {breachBanners.map((b) => (
+        <div key={b.contract} role="alert" className={styles.breachBanner}>
+          <Text size={13} tone="reject">{b.text}</Text>
+          <div className={styles.breachActions}>
+            <button
+              type="button"
+              className={styles.breachBtn}
+              onClick={() => { setTab('open'); setEditing(b.contract); setSelectedSymbol(b.symbol); }}
+            >
+              {`Review ${b.symbol}`}
+            </button>
+            <button type="button" className={styles.breachBtn} onClick={() => setClosing(b.contract)}>
+              Close position…
+            </button>
+          </div>
+        </div>
+      ))}
 
       <div className={styles.tabs}>
         <button type="button" className={tab === 'open' ? styles.tabActive : styles.tab} onClick={() => setTab('open')}>
@@ -553,6 +599,11 @@ export default function PortfolioPage() {
                 {' / '}
                 <span className={styles.loss}>{losers}</span>
               </Data>
+            </div>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">Risk at stops</Text>
+              <Data size={14} weight={500}>{formatMoney(riskTotal.total)}</Data>
+              {riskTotal.unpriced > 0 && <Text size={10} tone="caution">{`+${riskTotal.unpriced} unpriced`}</Text>}
             </div>
             {unquoted > 0 && (
               <div className={styles.footerGroup}>
