@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/portfolio-quote-gaps-8c0ac135",
-      "claimed_at": "2026-11-20T06:41:25Z",
-      "expires_at": "2026-11-20T09:41:25Z",
-      "note": "Board #658: self-merge PR #674 + state follow-up",
-      "task": "PORTFOLIO-QUOTE-GAPS"
-    }
-  ]
+  "claims": []
 }
