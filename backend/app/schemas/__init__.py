@@ -1605,3 +1605,6 @@ class PerformanceResponse(BaseModel):
     realizedCurve: list[PerformancePoint] = []   # cumulative realized profit line
     equityCurve: list[PerformancePoint] = []      # total account value line (from snapshots)
     openPnlCurve: list[PerformancePoint] = []     # unrealized P&L of open positions (from snapshots)
+    lastSnapshotDate: Optional[str] = None        # snapshot_date (YYYY-MM-DD) of the newest equity_snapshots row; None = no row
+    snapshotSkippedOn: Optional[str] = None       # process-local: date the latest GET /api/portfolio skipped the snapshot for unquoted rows, while that is the latest outcome; None = no skip recorded by this process
+    snapshotSkippedContracts: list[str] = []      # process-local: de-duplicated unquoted contract ids of that skipping read, in response order; [] when snapshotSkippedOn is None
