@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePerformanceStore } from '@/lib/performanceStore';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -35,7 +35,10 @@ export const PORTFOLIO_CYCLE_MS = 30_000;
  * the performance fetch (the curve would be read without the preceding
  * snapshot write) runs.
  */
-export function usePortfolioCycle(): void {
+export function usePortfolioCycle(onSynced?: () => void): void {
+  // Latest callback without re-arming the interval.
+  const onSyncedRef = useRef(onSynced);
+  onSyncedRef.current = onSynced;
   useEffect(() => {
     const visible = () => document.visibilityState !== 'hidden';
     let running = false;
@@ -53,6 +56,7 @@ export function usePortfolioCycle(): void {
         // every position got a quote; only then read performance.
         const ok = await usePortfolioStore.getState().syncFromBackend?.();
         if (disposed || ok === false) return;
+        onSyncedRef.current?.();
         if (!initial) {
           const positions = usePortfolioStore.getState().positions;
           const pct = useSettingsStore.getState().premiumStopPct;

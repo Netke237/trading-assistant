@@ -6,7 +6,7 @@
  * History tab of closed trades with the realized P&L views.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
@@ -21,6 +21,7 @@ import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { usePortfolioCycle } from '@/lib/usePortfolioCycle';
+import { useClientClock } from '@/lib/useClientNow';
 import { syncStatusView, positionsLoadState } from '@/lib/syncStatus';
 import { hhmmss } from '@/lib/configHealth';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
@@ -166,7 +167,8 @@ export default function PortfolioPage() {
 
   // 30 s cycle (sync -> alert scan -> performance), paused while the tab is
   // hidden; see lib/usePortfolioCycle.ts.
-  usePortfolioCycle();
+  const { now, refreshNow } = useClientClock();
+  usePortfolioCycle(refreshNow);
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   // Clear the sidebar's selected-symbol note when leaving this page, so a
@@ -202,16 +204,39 @@ export default function PortfolioPage() {
     return [{ contract: p.contract, symbol: p.symbol, text }];
   });
 
-  const now = new Date();
+  // Clock-derived labels come from effect-set state only: on the server pass
+  // and the first client render `now` is null and no period text is rendered,
+  // so server HTML and the first hydrated render agree (React #418).
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-  const todayLabel = fmtDay(now);
-  // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
-  const mondayOffset = (now.getDay() + 6) % 7;
-  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
-  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
-  const weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
-  const monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  const yearLabel = String(now.getFullYear());
+  let todayLabel: string | undefined;
+  let weekLabel: string | undefined;
+  let monthLabel: string | undefined;
+  let yearLabel: string | undefined;
+  if (now) {
+    todayLabel = fmtDay(now);
+    // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
+    const mondayOffset = (now.getDay() + 6) % 7;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+    const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+    weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
+    monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    yearLabel = String(now.getFullYear());
+  }
+
+  const TABS = ['open', 'history'] as const;
+  const tabRefs = useRef<Record<'open' | 'history', HTMLButtonElement | null>>({ open: null, history: null });
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const i = TABS.indexOf(tab);
+    let next: 'open' | 'history' | null = null;
+    if (e.key === 'ArrowRight') next = TABS[(i + 1) % TABS.length];
+    else if (e.key === 'ArrowLeft') next = TABS[(i + TABS.length - 1) % TABS.length];
+    else if (e.key === 'Home') next = TABS[0];
+    else if (e.key === 'End') next = TABS[TABS.length - 1];
+    if (next === null) return;
+    e.preventDefault();
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  };
 
   const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
     setCloseError(null);
@@ -288,11 +313,23 @@ export default function PortfolioPage() {
         </div>
       ))}
 
-      <div className={styles.tabs}>
-        <button type="button" className={tab === 'open' ? styles.tabActive : styles.tab} onClick={() => setTab('open')}>
+      <div className={styles.tabs} role="tablist" aria-label="Portfolio views">
+        <button
+          type="button" role="tab" id="portfolio-tab-open" aria-controls="portfolio-panel-open"
+          aria-selected={tab === 'open'} tabIndex={tab === 'open' ? 0 : -1}
+          ref={(el) => { tabRefs.current.open = el; }}
+          className={tab === 'open' ? styles.tabActive : styles.tab}
+          onClick={() => setTab('open')} onKeyDown={onTabKeyDown}
+        >
           Open ({positions.length})
         </button>
-        <button type="button" className={tab === 'history' ? styles.tabActive : styles.tab} onClick={() => setTab('history')}>
+        <button
+          type="button" role="tab" id="portfolio-tab-history" aria-controls="portfolio-panel-history"
+          aria-selected={tab === 'history'} tabIndex={tab === 'history' ? 0 : -1}
+          ref={(el) => { tabRefs.current.history = el; }}
+          className={tab === 'history' ? styles.tabActive : styles.tab}
+          onClick={() => setTab('history')} onKeyDown={onTabKeyDown}
+        >
           History ({history.length})
         </button>
       </div>
@@ -305,7 +342,7 @@ export default function PortfolioPage() {
       </div>
 
       {tab === 'history' && (
-        <>
+        <div role="tabpanel" id="portfolio-panel-history" aria-labelledby="portfolio-tab-history" className={styles.panel}>
         {/* 1. Equity curve — sits above the trade list */}
         <div className={styles.perfViews}>
           <PnlChart
@@ -394,10 +431,10 @@ export default function PortfolioPage() {
 
         {/* 3. Realized P&L heatmap — below the list */}
         <PnlHeatmap history={history} />
-        </>
+        </div>
       )}
 
-      {tab === 'open' && (<>
+      {tab === 'open' && (<div role="tabpanel" id="portfolio-panel-open" aria-labelledby="portfolio-tab-open" className={styles.panel}>
         {loadState === 'loading' ? (
         <div className={styles.empty} role="status">
           <Text size={14} tone="secondary">Syncing positions…</Text>
@@ -618,7 +655,7 @@ export default function PortfolioPage() {
             defaultKind="open"
           />
         </div>
-      </>)}
+      </div>)}
 
       {tab === 'open' && closing && (() => {
         const p = positions.find((x) => x.contract === closing);

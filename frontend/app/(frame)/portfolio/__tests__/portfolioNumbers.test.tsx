@@ -108,7 +108,7 @@ describe('Portfolio page numbers (PORTFOLIO-NUMBERS T3)', () => {
 
   it('history rows: readable contract titled with the raw key, signed money', () => {
     const { container } = renderWith(portfolio20261117());
-    fireEvent.click(screen.getByRole('button', { name: 'History (1)' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'History (1)' }));
     const titled = container.querySelector('[title="NFLX|82|2026-10-16|C"]') as HTMLElement;
     expect(titled).not.toBeNull();
     expect(within(titled).getByText('82C · 16 Oct 26')).toBeInTheDocument();
