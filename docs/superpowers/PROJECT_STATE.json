@@ -11497,7 +11497,7 @@
     {
       "id": "PORTFOLIO-RISK-VIEW",
       "name": "Portfolio table risk view: derived status, stop-breach banner, stop/target range, risk at stop (#660)",
-      "status": "built",
+      "status": "shipped",
       "tracking_issue": 660,
       "branch": "board/portfolio-risk-view-05e72a04",
       "size": "L",
@@ -11513,7 +11513,7 @@
         "pattern": "export function derivePositionStatus",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-20 built: tickets #679-#682 closed; plan audit 2 rounds clean; code round 1 clean (0 gate findings) at 55472baf. Local: typecheck ok; portfolio/lib suites pass; implementer full runs green (T4 run: 4 unrelated screener suites timed out under load, pass --runInBand). Logged below gate: positionRange.fraction null when T1 missing/equal stop (bar drawn open). SELF-MERGE PENDING, PR #683, audited head 55472baf (pending is not shipped).",
+      "note": "2026-11-20 built: tickets #679-#682 closed; plan audit 2 rounds clean; code round 1 clean (0 gate findings) at 55472baf. Local: typecheck ok; portfolio/lib suites pass; implementer full runs green (T4 run: 4 unrelated screener suites timed out under load, pass --runInBand). Logged below gate: positionRange.fraction null when T1 missing/equal stop (bar drawn open). SHIPPED 2026-11-21: PR #683 merged at 3d6704f380d2924dbac047369ef8f9402359c667 (head d5bc035c, CI green on the exact head, audit clean at 55472baf).",
       "plan_stage": {
         "rounds": 2,
         "clean": true,
