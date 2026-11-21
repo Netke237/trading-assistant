@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "board/portfolio-sync-state-02708542",
+      "claimed_at": "2026-11-21T06:33:51Z",
+      "expires_at": "2026-11-21T09:33:51Z",
+      "note": "#661 board take",
+      "task": "PORTFOLIO-SYNC-STATE"
+    }
+  ]
 }
