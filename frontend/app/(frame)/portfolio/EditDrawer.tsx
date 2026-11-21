@@ -19,7 +19,7 @@ import { flushPendingPositionPatches, useIsSymbolHeld, usePortfolioStore } from 
 import { rejectionMessage } from '@/lib/portfolioRejection';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
+import { riskAtStopOf, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { useAlertStore } from '@/lib/alertStore';
@@ -910,10 +910,11 @@ function MaxLossBanner({
   // loss genuinely can't be computed.
   if (!exitPlan || position.contract.endsWith('|STOCK') || position.entryPrice <= 0) return null;
 
-  const lossAtStop = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, debounced.contracts);
+  // Non-null: the guard above is exactly riskAtStopOf's own precondition.
+  const lossAtStop = riskAtStopOf(position, debounced.contracts) ?? 0;
   const limitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, debounced.override);
   const exceeded = lossAtStop > limitDollar;
-  const riskPerContract = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, 1);
+  const riskPerContract = riskAtStopOf(position, 1) ?? 0;
   const sizing = recommendedContractSize(limitDollar, riskPerContract);
 
   const applyOverride = () => {
