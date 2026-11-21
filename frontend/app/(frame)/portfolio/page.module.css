@@ -12,6 +12,10 @@
   align-items: baseline;
 }
 
+.syncStatus {
+  margin-top: calc(var(--space-2) * -1);
+}
+
 .tableWrap {
   display: flex;
   flex-direction: column;
