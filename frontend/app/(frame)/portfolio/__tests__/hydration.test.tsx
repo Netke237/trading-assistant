@@ -11,7 +11,12 @@ import { usePerformanceStore } from '@/lib/performanceStore';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const g = globalThis as unknown as Record<string, unknown>;
 g.TextEncoder ??= require('util').TextEncoder;
-g.MessageChannel ??= require('worker_threads').MessageChannel;
+// An inert stub, not worker_threads' real channel: a real MessageChannel keeps an open handle
+// that stops Jest exiting when the suite runs in-band.
+g.MessageChannel ??= class {
+  port1: { onmessage: ((e: { data: unknown }) => void) | null } = { onmessage: null };
+  port2 = { postMessage: (data: unknown) => { setTimeout(() => this.port1.onmessage?.({ data }), 0); } };
+};
 const { renderToString } = require('react-dom/server') as typeof import('react-dom/server');
 
 jest.mock('@/components/organisms/PnlChart', () => ({ PnlChart: () => null }));
