@@ -6,7 +6,7 @@
  * History tab of closed trades with the realized P&L views.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
@@ -20,8 +20,11 @@ import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { useAlertStore } from '@/lib/alertStore';
-import { scanPortfolio } from '@/lib/alertEngine';
+import { usePortfolioCycle } from '@/lib/usePortfolioCycle';
+import { useClientClock } from '@/lib/useClientNow';
+import { syncStatusView, positionsLoadState } from '@/lib/syncStatus';
+import { hhmmss } from '@/lib/configHealth';
+import { staleCurveNotice } from '@/lib/staleCurve';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
 import { derivePositionStatus } from '@/lib/positionStatus';
@@ -142,7 +145,9 @@ export default function PortfolioPage() {
   // closing this informational notice also wiped the rejection banner above it.
   const clearPremiumStopDropped = usePortfolioStore((s) => s.clearPremiumStopDropped);
   const clearSyncError = usePortfolioStore((s) => s.clearSyncError);
-  const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
+  const lastSyncAt = usePortfolioStore((s) => s.lastSyncAt);
+  const lastSyncFailedAt = usePortfolioStore((s) => s.lastSyncFailedAt);
+  const firstSyncAt = usePortfolioStore((s) => s.firstSyncAt);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
   const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
   const [editing, setEditing] = useState<string | null>(null);
@@ -155,42 +160,18 @@ export default function PortfolioPage() {
   const performance = usePerformanceStore((s) => s.performance);
   const fetchHistory = usePerformanceStore((s) => s.fetchHistory);
   const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
+  const performanceFetchedAt = usePerformanceStore((s) => s.fetchedAt);
+  const syncStatus = syncStatusView({ lastSyncAt, lastSyncFailedAt, firstSyncAt });
+  const loadState = positionsLoadState(positions.length, lastSyncAt, lastSyncFailedAt);
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
   const clearAllHistory = usePerformanceStore((s) => s.clearAllHistory);
   const [clearConfirm, setClearConfirm] = useState(false);
 
-  useEffect(() => {
-    // Sync open positions FIRST — GET /api/portfolio writes today's equity
-    // snapshot (including open P&L) when every position got a quote; when any
-    // did not, it skips the write and today's point stays as last written
-    // (NO-LIVE-QUOTE NLQ-1). Only then read performance, otherwise the curve
-    // races ahead of a write and shows a stale value.
-    (async () => {
-      await syncFromBackend();
-      fetchPerformance();
-    })();
-    fetchHistory();
-
-    // Every 30 s: refresh live quotes → run alert engine → refresh equity curve.
-    // Chained so alerts always fire on freshly-fetched prices, not a parallel clock.
-    const runCycle = () => {
-      usePortfolioStore.getState().syncFromBackend?.()
-        .then(() => {
-          const positions = usePortfolioStore.getState().positions;
-          const pct = useSettingsStore.getState().premiumStopPct;
-          const addToast = useAlertStore.getState().addToast;
-          // enabledTypes is read here (not captured in the effect's closure) so
-          // a Settings change takes effect on the very next 30s cycle without
-          // this interval having to be torn down and re-created.
-          const enabledTypes = useAlertStore.getState().config.enabledTypes;
-          for (const r of scanPortfolio(positions, { premiumStopPct: pct, enabledTypes })) addToast(r);
-          usePerformanceStore.getState().fetchPerformance();
-        })
-        .catch(() => {});
-    };
-    const id = setInterval(runCycle, 30_000);
-    return () => clearInterval(id);
-  }, [syncFromBackend, fetchHistory, fetchPerformance]);
+  // 30 s cycle (sync -> alert scan -> performance), paused while the tab is
+  // hidden; see lib/usePortfolioCycle.ts.
+  const { now, refreshNow } = useClientClock();
+  usePortfolioCycle(refreshNow);
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   // Clear the sidebar's selected-symbol note when leaving this page, so a
   // stale selection doesn't linger for the next visit.
@@ -201,6 +182,23 @@ export default function PortfolioPage() {
   // A row with no quote carries 0 defaults, not a price: the totals leave it
   // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
+  // Stale-curve notices (Open P&L and Total value only). `ready`: a performance
+  // request was ISSUED at or after the first successful sync, so the curve is
+  // not older than that sync's snapshot write. `now` is effect-set (hydration).
+  const staleReady = firstSyncAt !== null && performanceFetchedAt !== null && performanceFetchedAt >= firstSyncAt;
+  const unquotedSymbols = Array.from(new Set(positions.filter((p) => p.quoteUnavailable === true).map((p) => p.symbol)));
+  const staleFor = (kind: 'open' | 'equity') => now === null ? null : staleCurveNotice({
+    kind,
+    lastSnapshotDate: performance.lastSnapshotDate,
+    curve: kind === 'open' ? performance.openPnlCurve : performance.equityCurve,
+    positionsCount: positions.length,
+    openPnlToday: openPnL,
+    unquotedSymbols,
+    skippedContracts: performance.snapshotSkippedContracts,
+    now,
+    ready: staleReady,
+  });
+  const staleNotices = { open: staleFor('open'), equity: staleFor('equity') };
   const { thetaDollars } = aggregateGreeks(positions);
   const riskTotal = riskAtStopTotal(positions);
 
@@ -225,16 +223,39 @@ export default function PortfolioPage() {
     return [{ contract: p.contract, symbol: p.symbol, text }];
   });
 
-  const now = new Date();
+  // Clock-derived labels come from effect-set state only: on the server pass
+  // and the first client render `now` is null and no period text is rendered,
+  // so server HTML and the first hydrated render agree (React #418).
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-  const todayLabel = fmtDay(now);
-  // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
-  const mondayOffset = (now.getDay() + 6) % 7;
-  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
-  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
-  const weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
-  const monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  const yearLabel = String(now.getFullYear());
+  let todayLabel: string | undefined;
+  let weekLabel: string | undefined;
+  let monthLabel: string | undefined;
+  let yearLabel: string | undefined;
+  if (now) {
+    todayLabel = fmtDay(now);
+    // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
+    const mondayOffset = (now.getDay() + 6) % 7;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+    const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+    weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
+    monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    yearLabel = String(now.getFullYear());
+  }
+
+  const TABS = ['open', 'history'] as const;
+  const tabRefs = useRef<Record<'open' | 'history', HTMLButtonElement | null>>({ open: null, history: null });
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const i = TABS.indexOf(tab);
+    let next: 'open' | 'history' | null = null;
+    if (e.key === 'ArrowRight') next = TABS[(i + 1) % TABS.length];
+    else if (e.key === 'ArrowLeft') next = TABS[(i + TABS.length - 1) % TABS.length];
+    else if (e.key === 'Home') next = TABS[0];
+    else if (e.key === 'End') next = TABS[TABS.length - 1];
+    if (next === null) return;
+    e.preventDefault();
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  };
 
   const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
     setCloseError(null);
@@ -254,6 +275,15 @@ export default function PortfolioPage() {
         <Title as="h1" size={24}>Portfolio</Title>
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
+      {syncStatus.kind === 'failed-with-prior' || syncStatus.kind === 'failed-no-prior' ? (
+        <div role="status" className={styles.syncStatus}>
+          <Text size={11} tone="caution">{syncStatus.text}</Text>
+        </div>
+      ) : (
+        <div className={styles.syncStatus}>
+          <Text size={11} tone={syncStatus.kind === 'syncing' ? 'dim' : 'secondary'}>{syncStatus.text}</Text>
+        </div>
+      )}
 
       <BrokerAttemptPanel />
 
@@ -302,11 +332,23 @@ export default function PortfolioPage() {
         </div>
       ))}
 
-      <div className={styles.tabs}>
-        <button type="button" className={tab === 'open' ? styles.tabActive : styles.tab} onClick={() => setTab('open')}>
+      <div className={styles.tabs} role="tablist" aria-label="Portfolio views">
+        <button
+          type="button" role="tab" id="portfolio-tab-open" aria-controls="portfolio-panel-open"
+          aria-selected={tab === 'open'} tabIndex={tab === 'open' ? 0 : -1}
+          ref={(el) => { tabRefs.current.open = el; }}
+          className={tab === 'open' ? styles.tabActive : styles.tab}
+          onClick={() => setTab('open')} onKeyDown={onTabKeyDown}
+        >
           Open ({positions.length})
         </button>
-        <button type="button" className={tab === 'history' ? styles.tabActive : styles.tab} onClick={() => setTab('history')}>
+        <button
+          type="button" role="tab" id="portfolio-tab-history" aria-controls="portfolio-panel-history"
+          aria-selected={tab === 'history'} tabIndex={tab === 'history' ? 0 : -1}
+          ref={(el) => { tabRefs.current.history = el; }}
+          className={tab === 'history' ? styles.tabActive : styles.tab}
+          onClick={() => setTab('history')} onKeyDown={onTabKeyDown}
+        >
           History ({history.length})
         </button>
       </div>
@@ -319,13 +361,14 @@ export default function PortfolioPage() {
       </div>
 
       {tab === 'history' && (
-        <>
+        <div role="tabpanel" id="portfolio-panel-history" aria-labelledby="portfolio-tab-history" className={styles.panel}>
         {/* 1. Equity curve — sits above the trade list */}
         <div className={styles.perfViews}>
           <PnlChart
             equityCurve={performance.equityCurve}
             realizedCurve={performance.realizedCurve}
             defaultKind="realized"
+            staleNotices={staleNotices}
           />
         </div>
 
@@ -408,11 +451,21 @@ export default function PortfolioPage() {
 
         {/* 3. Realized P&L heatmap — below the list */}
         <PnlHeatmap history={history} />
-        </>
+        </div>
       )}
 
-      {tab === 'open' && (<>
-        {positions.length === 0 ? (
+      {tab === 'open' && (<div role="tabpanel" id="portfolio-panel-open" aria-labelledby="portfolio-tab-open" className={styles.panel}>
+        {loadState === 'loading' ? (
+        <div className={styles.empty} role="status">
+          <Text size={14} tone="secondary">Syncing positions…</Text>
+        </div>
+      ) : loadState === 'failed' ? (
+        <div className={styles.empty}>
+          <Text size={14} tone="caution">
+            {`Could not load positions. Last sync failed ${hhmmss(lastSyncFailedAt ?? 0)}.`}
+          </Text>
+        </div>
+      ) : loadState === 'empty' ? (
         <div className={styles.empty}>
           <Text size={14} tone="secondary">No open positions.</Text>
           <Text size={12} tone="dim">
@@ -620,9 +673,10 @@ export default function PortfolioPage() {
             realizedCurve={performance.realizedCurve}
             openPnlCurve={performance.openPnlCurve}
             defaultKind="open"
+            staleNotices={staleNotices}
           />
         </div>
-      </>)}
+      </div>)}
 
       {tab === 'open' && closing && (() => {
         const p = positions.find((x) => x.contract === closing);

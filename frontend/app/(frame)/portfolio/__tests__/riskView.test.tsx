@@ -132,6 +132,7 @@ describe('Portfolio risk view table (PORTFOLIO-RISK-VIEW T3)', () => {
   });
 
   it('keeps the empty state', () => {
+    usePortfolioStore.setState({ lastSyncAt: 1 } as never); // a real, completed sync
     renderWith([]);
     expect(screen.getByText('No open positions.')).toBeInTheDocument();
   });
