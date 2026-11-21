@@ -24,6 +24,7 @@ import { usePortfolioCycle } from '@/lib/usePortfolioCycle';
 import { useClientClock } from '@/lib/useClientNow';
 import { syncStatusView, positionsLoadState } from '@/lib/syncStatus';
 import { hhmmss } from '@/lib/configHealth';
+import { staleCurveNotice } from '@/lib/staleCurve';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
 import { derivePositionStatus } from '@/lib/positionStatus';
@@ -159,6 +160,7 @@ export default function PortfolioPage() {
   const performance = usePerformanceStore((s) => s.performance);
   const fetchHistory = usePerformanceStore((s) => s.fetchHistory);
   const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
+  const performanceFetchedAt = usePerformanceStore((s) => s.fetchedAt);
   const syncStatus = syncStatusView({ lastSyncAt, lastSyncFailedAt, firstSyncAt });
   const loadState = positionsLoadState(positions.length, lastSyncAt, lastSyncFailedAt);
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
@@ -180,6 +182,23 @@ export default function PortfolioPage() {
   // A row with no quote carries 0 defaults, not a price: the totals leave it
   // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
+  // Stale-curve notices (Open P&L and Total value only). `ready`: a performance
+  // request was ISSUED at or after the first successful sync, so the curve is
+  // not older than that sync's snapshot write. `now` is effect-set (hydration).
+  const staleReady = firstSyncAt !== null && performanceFetchedAt !== null && performanceFetchedAt >= firstSyncAt;
+  const unquotedSymbols = Array.from(new Set(positions.filter((p) => p.quoteUnavailable === true).map((p) => p.symbol)));
+  const staleFor = (kind: 'open' | 'equity') => now === null ? null : staleCurveNotice({
+    kind,
+    lastSnapshotDate: performance.lastSnapshotDate,
+    curve: kind === 'open' ? performance.openPnlCurve : performance.equityCurve,
+    positionsCount: positions.length,
+    openPnlToday: openPnL,
+    unquotedSymbols,
+    skippedContracts: performance.snapshotSkippedContracts,
+    now,
+    ready: staleReady,
+  });
+  const staleNotices = { open: staleFor('open'), equity: staleFor('equity') };
   const { thetaDollars } = aggregateGreeks(positions);
   const riskTotal = riskAtStopTotal(positions);
 
@@ -349,6 +368,7 @@ export default function PortfolioPage() {
             equityCurve={performance.equityCurve}
             realizedCurve={performance.realizedCurve}
             defaultKind="realized"
+            staleNotices={staleNotices}
           />
         </div>
 
@@ -653,6 +673,7 @@ export default function PortfolioPage() {
             realizedCurve={performance.realizedCurve}
             openPnlCurve={performance.openPnlCurve}
             defaultKind="open"
+            staleNotices={staleNotices}
           />
         </div>
       </div>)}
