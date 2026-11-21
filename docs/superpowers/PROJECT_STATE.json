@@ -11573,23 +11573,23 @@
     {
       "id": "PORTFOLIO-SYNC-STATE",
       "name": "Portfolio sync state: last-synced time, loading state, hidden-tab pause, stale P&L curve notice, tabs a11y, hydration #418 (#661)",
-      "status": "in_progress",
+      "status": "built",
       "tracking_issue": 661,
       "branch": "board/portfolio-sync-state-02708542",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 5,
+      "completion_pct": 85,
       "plan": "docs/superpowers/plans/2026-11-21-portfolio-sync-state-plan.md",
       "audit_rounds": 2,
       "audit_clean": false,
       "plan_audit_clean": true,
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "frontend/app/(frame)/portfolio/page.tsx",
         "pattern": "syncStatusView",
-        "note": "Absent until T2 wires the sync status line into the page (then flip status to built). Presence only; not proof of behaviour, audit or merge."
+        "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-21 plan audit 2 rounds, clean (round 1: 1 gate finding G1 fetchedAt stamped at response time, fixed at fcc51bfa; round 2: zero). Tickets T1-T4 next; no code yet."
+      "note": "2026-11-21 plan audit 2 rounds, clean (round 1: 1 gate finding G1 fetchedAt stamped at response time, fixed at fcc51bfa; round 2: zero). Built: tickets #685-#688 closed (5765b1c6, 48c07e6d, 01cecd37+0343553e, d867bb75). Local: typecheck ok; portfolio/lib/PnlChart suites pass; step-7 screener suite times out only under parallel load. Production-build console check for #418 not run (hydrateRoot test is the evidence). Code audit round 1 pending."
     }
   ],
   "already_shipped": [
