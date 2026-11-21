@@ -28,6 +28,7 @@ function renderWith(positions: PortfolioPosition[]) {
     performance: {
       realizedToday: -2595, realizedWeek: 89, realizedMonth: 0, realizedYear: 0,
       realizedCurve: [], equityCurve: [], openPnlCurve: [],
+      lastSnapshotDate: null, snapshotSkippedOn: null, snapshotSkippedContracts: [],
     },
     fetchHistory: jest.fn().mockResolvedValue(undefined),
     fetchPerformance: jest.fn().mockResolvedValue(undefined),
