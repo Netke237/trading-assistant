@@ -11578,10 +11578,10 @@
       "branch": "board/portfolio-history-insights-9e3de20c",
       "size": "L",
       "complexity": 3,
-      "completion_pct": 70,
+      "completion_pct": 85,
       "plan": "docs/superpowers/plans/2026-11-22-portfolio-history-insights-plan.md",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "verify": {
         "kind": "present",
@@ -11589,7 +11589,14 @@
         "pattern": "export function computeTradeStats",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-22 plan drafted; plan audit round 1 clean (0 gate findings) at 349ce49d by fresh gate-auditor aa13853272a2ff328; tickets #693-#696 built and closed (0933d904, 7f309ede, b0eb215f, 4d8c69fc); coordinator re-ran typecheck, eslint, portfolio+journal suites (13/296) green; origin/main already merged (up to date). Code audit pending.",
+      "note": "2026-11-22 plan drafted; plan audit round 1 clean (0 gate findings) at 349ce49d by fresh gate-auditor aa13853272a2ff328; tickets #693-#696 built and closed (0933d904, 7f309ede, b0eb215f, 4d8c69fc); coordinator re-ran typecheck, eslint, portfolio+journal suites (13/296) green; origin/main already merged (up to date). Code audit round 1 clean (0 gate findings) by fresh gate-auditor af76d333d59177328 on git diff origin/main..fb3a213b -- frontend. SELF-MERGE PENDING, audited head fb3a213b (state-only records follow; pending is not shipped).",
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "fresh gate-auditor af76d333d59177328",
+        "reviewed": "git diff origin/main..fb3a213b -- frontend"
+      },
       "plan_stage": {
         "rounds": 1,
         "clean": true,
