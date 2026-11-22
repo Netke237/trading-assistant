@@ -28,6 +28,7 @@ function renderWith(positions: PortfolioPosition[]) {
     performance: {
       realizedToday: -2595, realizedWeek: 89, realizedMonth: 0, realizedYear: 0,
       realizedCurve: [], equityCurve: [], openPnlCurve: [],
+      lastSnapshotDate: null, snapshotSkippedOn: null, snapshotSkippedContracts: [],
     },
     fetchHistory: jest.fn().mockResolvedValue(undefined),
     fetchPerformance: jest.fn().mockResolvedValue(undefined),
@@ -107,7 +108,7 @@ describe('Portfolio page numbers (PORTFOLIO-NUMBERS T3)', () => {
 
   it('history rows: readable contract titled with the raw key, signed money', () => {
     const { container } = renderWith(portfolio20261117());
-    fireEvent.click(screen.getByRole('button', { name: 'History (1)' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'History (1)' }));
     const titled = container.querySelector('[title="NFLX|82|2026-10-16|C"]') as HTMLElement;
     expect(titled).not.toBeNull();
     expect(within(titled).getByText('82C · 16 Oct 26')).toBeInTheDocument();

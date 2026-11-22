@@ -86,9 +86,11 @@ describe('stop-breach banner', () => {
 
   it('Review opens the editor, selects the symbol and shows the Open tab', () => {
     renderWith(fixtures());
-    fireEvent.click(screen.getByText('History (0)'));
+    fireEvent.click(screen.getByRole('tab', { name: 'History (0)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Review BMY' }));
     expect(screen.getByTestId('editor-open')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Open/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'portfolio-panel-open');
     expect(usePortfolioUiStore.getState().selectedSymbol).toBe('BMY');
   });
 
