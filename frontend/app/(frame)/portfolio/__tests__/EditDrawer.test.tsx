@@ -1937,7 +1937,7 @@ describe('Current price on a position without a quote', () => {
     expect(price.value).toBe('');
     expect(price.placeholder).toBe('— (no quote)');
     expect(screen.getByText('Quote unavailable')).toBeInTheDocument();
-    expect(screen.queryByText(/Manual override/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Manual override — will refresh/)).not.toBeInTheDocument();
   });
 
   it('an empty commit writes nothing and stays empty, with no message', () => {
@@ -1968,7 +1968,7 @@ describe('Current price on a position without a quote', () => {
     render(<LiveDrawer initial={makeOptionPosition()} onPatch={jest.fn()} />);
     const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
     expect(price.value).toBe('4.5');
-    expect(screen.getByText(/Manual override/)).toBeInTheDocument();
+    expect(screen.getByText(/Manual override — will refresh/)).toBeInTheDocument();
     expect(screen.queryByText('Quote unavailable')).not.toBeInTheDocument();
   });
 });

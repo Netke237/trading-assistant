@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { EditDrawer } from '../EditDrawer';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -155,5 +155,47 @@ describe('Position editor sections (#662 T1)', () => {
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     // every section contributes at least one tab stop
     expect(new Set(idx).size).toBe(5);
+  });
+});
+
+describe('Manual overrides fold (#662 T2)', () => {
+  const summaryOf = () => screen.getByText('Manual overrides', { selector: 'summary' });
+
+  it.each([['option', makeOptionPosition], ['stock', makeStockPosition]] as const)(
+    '%s: Current price sits inside a closed "Manual overrides" details in the Position section',
+    (_k, make) => {
+      mount(make());
+      const details = summaryOf().closest('details') as HTMLDetailsElement;
+      expect(details).not.toBeNull();
+      expect(details.open).toBe(false);
+      expect(details.contains(screen.getByLabelText(/Current price/))).toBe(true);
+      expect(region('Position').contains(details)).toBe(true);
+      expect(details.contains(screen.getByLabelText(/Contracts/))).toBe(false);
+      expect(details.contains(screen.getByText('Notes'))).toBe(false);
+    },
+  );
+
+  it('order inside Position is Contracts, Manual overrides, Notes', () => {
+    mount(makeOptionPosition());
+    const details = summaryOf().closest('details') as HTMLElement;
+    expect(before(screen.getByLabelText(/Contracts/), details)).toBe(true);
+    expect(before(details, screen.getByText('Notes'))).toBe(true);
+  });
+
+  it('editing the price from the opened details still flags a stale estimate', async () => {
+    const { api } = jest.requireMock('@/lib/api');
+    api.getStockFirstPassage.mockResolvedValueOnce({
+      targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    mount(makeStockPosition());
+    fireEvent.click(screen.getByText('Estimate'));
+    expect(await screen.findByText('60%')).toBeInTheDocument();
+    (summaryOf().closest('details') as HTMLDetailsElement).open = true;
+    fireEvent.change(screen.getByLabelText(/Current price/), { target: { value: '210' } });
+    fireEvent.blur(screen.getByLabelText(/Current price/));
+    expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
   });
 });

@@ -281,6 +281,18 @@
 .editSectionFull {
   grid-column: 1 / -1;
 }
+.manualOverrides {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.manualOverridesSummary {
+  cursor: pointer;
+  font-family: var(--font-dm);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
 /* ---------- /Editor sections (#662) ---------- */
 
 .editField {

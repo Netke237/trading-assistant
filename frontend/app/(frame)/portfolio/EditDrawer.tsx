@@ -621,41 +621,44 @@ export function EditDrawer({
             {priceRejected && <Text size={10} tone="caution">{priceRejected}</Text>}
             {exposureBreach && <Text size={10} tone="caution">{rejectionMessage(exposureBreach)}</Text>}
           </div>
-          <EditField
-            label="Current price"
-            // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
-            // quote for carries a 0 currentPrice that is not a price. The field
-            // shows it as unknown -- empty, with a placeholder -- exactly as the
-            // table shows "—", never as 0.
-            hint={position.quoteUnavailable
-              ? 'Quote unavailable'
-              : 'Manual override — will refresh from broker in live mode.'}
-            value={position.currentPrice}
-            unknown={position.quoteUnavailable === true}
-            placeholder="— (no quote)"
-            // 0 is refused here (decision Q6): it would write `currentPrice: 0`
-            // and a -100% P&L onto the row. The way to mark a position worthless
-            // is to CLOSE it at $0, which the close path supports end to end.
-            //
-            // How long a typed value survives (P2-14, corrected): it is not sent
-            // to the backend -- `toUpdatePayload` omits currentPrice/pnlDollar/
-            // pnlPct -- but it IS persisted to localStorage (partialize keeps
-            // `positions`), so it survives a reload for as long as syncs fail.
-            // A successful sync's `fromBackend` rewrites all three.
-            zeroClears={false}
-            zeroMessage="Must be greater than 0 — to mark it worthless, close the position at $0 (Close button). Kept the previous value."
-            onChange={(n) => {
-              const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
-              const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
-              const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
-              // A typed price IS a mark: the row is no longer "no quote" until the
-              // next sync says otherwise (fromBackend rewrites the flag). Without
-              // this the override would be written while the field, the table and
-              // the totals all kept showing it as unknown.
-              onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
-              setPriceEditedSinceEstimate(true);
-            }}
-          />
+          <details className={styles.manualOverrides}>
+            <summary className={styles.manualOverridesSummary}>Manual overrides</summary>
+            <EditField
+              label="Current price"
+              // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
+              // quote for carries a 0 currentPrice that is not a price. The field
+              // shows it as unknown -- empty, with a placeholder -- exactly as the
+              // table shows "—", never as 0.
+              hint={position.quoteUnavailable
+                ? 'Quote unavailable'
+                : 'Manual override — will refresh from broker in live mode.'}
+              value={position.currentPrice}
+              unknown={position.quoteUnavailable === true}
+              placeholder="— (no quote)"
+              // 0 is refused here (decision Q6): it would write `currentPrice: 0`
+              // and a -100% P&L onto the row. The way to mark a position worthless
+              // is to CLOSE it at $0, which the close path supports end to end.
+              //
+              // How long a typed value survives (P2-14, corrected): it is not sent
+              // to the backend -- `toUpdatePayload` omits currentPrice/pnlDollar/
+              // pnlPct -- but it IS persisted to localStorage (partialize keeps
+              // `positions`), so it survives a reload for as long as syncs fail.
+              // A successful sync's `fromBackend` rewrites all three.
+              zeroClears={false}
+              zeroMessage="Must be greater than 0 — to mark it worthless, close the position at $0 (Close button). Kept the previous value."
+              onChange={(n) => {
+                const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
+                const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
+                const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
+                // A typed price IS a mark: the row is no longer "no quote" until the
+                // next sync says otherwise (fromBackend rewrites the flag). Without
+                // this the override would be written while the field, the table and
+                // the totals all kept showing it as unknown.
+                onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
+                setPriceEditedSinceEstimate(true);
+              }}
+            />
+          </details>
           <div className={styles.targetEditor}>
             <Text size={11} tone="secondary">Notes</Text>
             <SymbolNotes symbol={position.symbol} editable={isHeld || isWatched} />
