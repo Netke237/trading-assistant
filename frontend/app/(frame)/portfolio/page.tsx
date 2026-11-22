@@ -6,7 +6,7 @@
  * History tab of closed trades with the realized P&L views.
  */
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
@@ -38,6 +38,11 @@ import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
 import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAtStopTotal } from '@/lib/portfolioTotals';
 import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
+import {
+  computeTradeStats, filterTrades, sortTrades, exitCheck, holdDays, returnPct,
+  type TradeFilter, type SortKey, type SortDir,
+} from '@/lib/tradeStats';
+import { TradeStatsStrip, stopTooltip } from './TradeStatsStrip';
 
 /** `−5.2%` / `+9.6%`, one decimal, Unicode minus. */
 function formatBreachPct(v: number): string {
@@ -45,7 +50,8 @@ function formatBreachPct(v: number): string {
   return Number(v.toFixed(1)) < 0 ? `${MINUS}${s}%` : `+${s}%`;
 }
 
-const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
+// Existing columns first; RETURN, HOLD, EXIT CHECK sit between P&L and the remove button.
+const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 28px';
 
 /** Tone for the resolved volatility figure. The bands are the same numbers on
  *  both bases today — 70 is `max_iv_abs`/`max_iv_rank` in contract_rules.yaml,
@@ -166,6 +172,31 @@ export default function PortfolioPage() {
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
   const clearAllHistory = usePerformanceStore((s) => s.clearAllHistory);
   const [clearConfirm, setClearConfirm] = useState(false);
+  const [histFilter, setHistFilter] = useState<TradeFilter>('all');
+  const [histQuery, setHistQuery] = useState('');
+  const [histSort, setHistSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
+  // Stats follow the filter (never the sort); the list is the filtered rows, sorted.
+  const filteredHistory = useMemo(() => filterTrades(history, histFilter, histQuery), [history, histFilter, histQuery]);
+  const historyStats = useMemo(() => computeTradeStats(filteredHistory, premiumStopPct), [filteredHistory, premiumStopPct]);
+  const sortedHistory = useMemo(
+    () => sortTrades(filteredHistory, histSort?.key ?? null, histSort?.dir ?? 'asc'),
+    [filteredHistory, histSort],
+  );
+  // asc -> desc -> off (API order).
+  const cycleSort = (key: SortKey) => setHistSort((cur) => {
+    if (cur === null || cur.key !== key) return { key, dir: 'asc' };
+    return cur.dir === 'asc' ? { key, dir: 'desc' } : null;
+  });
+  const ariaSort = (...keys: SortKey[]): 'ascending' | 'descending' | 'none' =>
+    histSort !== null && keys.includes(histSort.key) ? (histSort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+  const sortBtn = (key: SortKey, label: string) => (
+    <button type="button" className={styles.sortBtn} onClick={() => cycleSort(key)}>
+      {label}
+      <span aria-hidden className={styles.sortMark}>
+        {histSort?.key === key ? (histSort.dir === 'asc' ? '▲' : '▼') : ''}
+      </span>
+    </button>
+  );
 
   // 30 s cycle (sync -> alert scan -> performance), paused while the tab is
   // hidden; see lib/usePortfolioCycle.ts.
@@ -362,7 +393,8 @@ export default function PortfolioPage() {
 
       {tab === 'history' && (
         <div role="tabpanel" id="portfolio-panel-history" aria-labelledby="portfolio-tab-history" className={styles.panel}>
-        {/* 1. Equity curve — sits above the trade list */}
+        {/* 1. Trade statistics, then the equity curve — both sit above the trade list */}
+        <TradeStatsStrip stats={historyStats} stopPct={premiumStopPct} />
         <div className={styles.perfViews}>
           <PnlChart
             equityCurve={performance.equityCurve}
@@ -420,31 +452,77 @@ export default function PortfolioPage() {
             </button>
           </div>
         </div>
+        {history.length > 0 && (
+          <div className={styles.historyFilterBar}>
+            <div role="group" aria-label="Filter trades" className={styles.filterGroup}>
+              {(['all', 'wins', 'losses'] as const).map((f) => (
+                <button
+                  key={f} type="button" aria-pressed={histFilter === f}
+                  className={histFilter === f ? styles.filterBtnActive : styles.filterBtn}
+                  onClick={() => setHistFilter(f)}
+                >
+                  {f === 'all' ? 'All' : f === 'wins' ? 'Wins' : 'Losses'}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text" className={styles.filterSearch} placeholder="Symbol"
+              aria-label="Search symbol" value={histQuery}
+              onChange={(e) => setHistQuery(e.target.value)}
+            />
+            <Text size={12} tone="secondary">{`Showing ${filteredHistory.length} of ${history.length}`}</Text>
+          </div>
+        )}
         <div className={styles.historyWrap}>
           {history.length === 0 ? (
             <Text size={13} tone="secondary">No closed trades yet.</Text>
           ) : (
           <>
-          <div className={styles.historyHeader} style={{ gridTemplateColumns: HISTORY_COLUMNS }}>
-            <Text size={11} tone="dim">SYMBOL</Text>
+          <div className={styles.historyHeader} role="row" data-testid="history-header" style={{ gridTemplateColumns: HISTORY_COLUMNS }}>
+            <div role="columnheader" aria-sort={ariaSort('symbol')}>{sortBtn('symbol', 'SYMBOL')}</div>
             <Text size={11} tone="dim">CONTRACT</Text>
             <Text size={11} tone="dim">QTY · ENTRY → EXIT</Text>
-            <Text size={11} tone="dim">DATES</Text>
-            <Text size={11} tone="dim">P&L</Text>
+            <div role="columnheader" aria-sort={ariaSort('entry', 'exit')} className={styles.datesHeader}>
+              {sortBtn('entry', 'ENTRY')}
+              {sortBtn('exit', 'EXIT')}
+            </div>
+            <div role="columnheader" aria-sort={ariaSort('pnl')}>{sortBtn('pnl', 'P&L')}</div>
+            <div role="columnheader" aria-sort={ariaSort('return')}>{sortBtn('return', 'RETURN')}</div>
+            <div role="columnheader" aria-sort={ariaSort('hold')}>{sortBtn('hold', 'HOLD')}</div>
+            <span title={stopTooltip(premiumStopPct)} data-testid="history-exitcheck-header">
+              <Text size={11} tone="dim">EXIT CHECK</Text>
+            </span>
             <span aria-hidden />
           </div>
-          {history.map((h) => (
-            <div key={h.id} className={styles.historyRow}>
-              <Data size={13} weight={500}>{h.symbol}</Data>
+          {sortedHistory.length === 0 && (
+            <Text size={13} tone="secondary">No trades match this filter.</Text>
+          )}
+          {sortedHistory.map((h) => {
+            const ret = returnPct(h);
+            const hd = holdDays(h);
+            const ec = exitCheck(h, premiumStopPct);
+            return (
+            <div key={h.id} className={styles.historyRow} data-testid="history-row">
+              <span data-testid="history-symbol"><Data size={13} weight={500}>{h.symbol}</Data></span>
               <span title={h.contract}><Text size={12} tone="secondary">{readableContract(h.contract)}</Text></span>
               <Text size={11} tone="dim">{h.qtyClosed}x · {h.entryPrice.toFixed(2)} → {h.exitPrice.toFixed(2)}</Text>
               <Text size={11} tone="secondary">{h.entryDate ? `${h.entryDate} → ${h.exitDate}` : h.exitDate}</Text>
               <Data size={13} weight={500} tone={h.realizedPnlDollar > 0 ? 'pass' : h.realizedPnlDollar < 0 ? 'reject' : undefined}>
                 {formatMoney(h.realizedPnlDollar, { plus: true })}
               </Data>
+              <span data-testid="history-return">
+                <Data size={12} tone={ret === null ? undefined : moneyTone(ret, 2)}>{ret === null ? '—' : formatSignedPct(ret, 1)}</Data>
+              </span>
+              <span data-testid="history-hold">
+                <Data size={12}>{hd === null ? '—' : `${hd}d`}</Data>
+              </span>
+              <span data-testid="history-exitcheck" title={stopTooltip(premiumStopPct)}>
+                <Text size={11} tone={ec.kind === 'past-stop' ? 'reject' : ec.kind === 'within-stop' ? 'caution' : 'secondary'}>{ec.label}</Text>
+              </span>
               <button type="button" className={styles.historyRemove} onClick={() => removeHistory(h.id)} aria-label={`Remove ${h.symbol} from history`} title="Remove from history">×</button>
             </div>
-          ))}
+            );
+          })}
           </>
           )}
         </div>
