@@ -3,9 +3,9 @@
     {
       "agent": "claude",
       "branch": "board/portfolio-sync-state-02708542",
-      "claimed_at": "2026-11-21T06:33:51Z",
-      "expires_at": "2026-11-21T10:34:28Z",
-      "note": "#661 board take",
+      "claimed_at": "2026-11-22T16:46:17Z",
+      "expires_at": "2026-11-22T19:46:17Z",
+      "note": "fix lint, PR 690",
       "task": "PORTFOLIO-SYNC-STATE"
     }
   ]
