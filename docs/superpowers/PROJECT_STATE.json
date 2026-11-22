@@ -10,16 +10,16 @@
     {
       "id": "PORTFOLIO-EDITOR-LAYOUT",
       "name": "Portfolio position editor regrouped into five sections, no field removed (#662)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "tracking_issue": 662,
       "branch": "board/portfolio-editor-layout-c2e7df65",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 20,
+      "completion_pct": 85,
       "plan": "docs/superpowers/plans/2026-11-22-portfolio-editor-layout-plan.md",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "plan_stage": {
         "rounds": 1,
@@ -39,15 +39,34 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "gate-auditor a97f773e5cfec9ae2",
+          "reviewed": "git diff origin/main..e3dbe03d -- frontend",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "fresh gate-auditor subagent a97f773e (round 1)",
+        "reviewed": "git diff origin/main..e3dbe03d -- frontend"
+      },
       "verify": {
         "kind": "present",
         "path": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
         "pattern": "editSections",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-22 plan written; plan audit round 1 clean (0 gate findings) at a8f09f74. Tickets #691 (T1), #692 (T2)."
+      "note": "2026-11-22 plan written; plan audit round 1 clean (0 gate findings) at a8f09f74. Tickets #691 (T1 f733f9a5), #692 (T2 e3dbe03d) closed. Code audit round 1 clean (0 gate findings) at e3dbe03d. Local: typecheck ok; eslint 0 errors; portfolio suites 12/288 pass."
     },
     {
       "id": "OHLCV-ALPACA-DAY-HOLES",
