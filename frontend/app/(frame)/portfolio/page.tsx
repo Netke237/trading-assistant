@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
@@ -39,7 +40,7 @@ import { premiumStopDropText } from '@/lib/premiumStop';
 import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAtStopTotal } from '@/lib/portfolioTotals';
 import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
 import {
-  computeTradeStats, filterTrades, sortTrades, exitCheck, holdDays, returnPct,
+  computeTradeStats, filterTrades, sortTrades, exitCheck, holdDays, returnPct, tradeLabel,
   type TradeFilter, type SortKey, type SortDir,
 } from '@/lib/tradeStats';
 import { TradeStatsStrip, stopTooltip } from './TradeStatsStrip';
@@ -51,7 +52,7 @@ function formatBreachPct(v: number): string {
 }
 
 // Existing columns first; RETURN, HOLD, EXIT CHECK sit between P&L and the remove button.
-const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 28px';
+const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 56px';
 
 /** Tone for the resolved volatility figure. The bands are the same numbers on
  *  both bases today — 70 is `max_iv_abs`/`max_iv_rank` in contract_rules.yaml,
@@ -172,6 +173,9 @@ export default function PortfolioPage() {
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
   const clearAllHistory = usePerformanceStore((s) => s.clearAllHistory);
   const [clearConfirm, setClearConfirm] = useState(false);
+  const [removePending, setRemovePending] = useState<string | null>(null);
+  const [removeFailed, setRemoveFailed] = useState(false);
+  const [removeBusy, setRemoveBusy] = useState(false);
   const [histFilter, setHistFilter] = useState<TradeFilter>('all');
   const [histQuery, setHistQuery] = useState('');
   const [histSort, setHistSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
@@ -182,6 +186,27 @@ export default function PortfolioPage() {
     () => sortTrades(filteredHistory, histSort?.key ?? null, histSort?.dir ?? 'asc'),
     [filteredHistory, histSort],
   );
+  // The remove confirm closes when its row leaves history or the visible list
+  // (filter, search, tab change), so it can never act on a row the user cannot see.
+  const pendingRow = removePending === null ? null : sortedHistory.find((h) => h.id === removePending) ?? null;
+  useEffect(() => {
+    if (removePending !== null && pendingRow === null) { setRemovePending(null); setRemoveFailed(false); }
+  }, [removePending, pendingRow]);
+  async function confirmRemove(id: string) {
+    setRemoveBusy(true);
+    try {
+      const ok = await removeHistory(id);
+      if (ok) {
+        await fetchPerformance();
+        setRemovePending(null);
+        setRemoveFailed(false);
+      } else {
+        setRemoveFailed(true);
+      }
+    } finally {
+      setRemoveBusy(false);
+    }
+  }
   // asc -> desc -> off (API order).
   const cycleSort = (key: SortKey) => setHistSort((cur) => {
     if (cur === null || cur.key !== key) return { key, dir: 'asc' };
@@ -473,6 +498,14 @@ export default function PortfolioPage() {
             <Text size={12} tone="secondary">{`Showing ${filteredHistory.length} of ${history.length}`}</Text>
           </div>
         )}
+        {pendingRow && (
+          <div role="alertdialog" aria-label="Confirm remove trade" className={styles.removeConfirm} data-testid="history-remove-confirm">
+            <Text size={12} tone="reject">{`Remove ${tradeLabel(pendingRow)} from history? This changes realized totals.`}</Text>
+            <button type="button" className={styles.clearConfirmBtn} disabled={removeBusy} onClick={() => confirmRemove(pendingRow.id)}>Confirm</button>
+            <button type="button" className={styles.downloadBtn} disabled={removeBusy} onClick={() => { setRemovePending(null); setRemoveFailed(false); }}>Cancel</button>
+            {removeFailed && <Text size={12} tone="reject">Could not remove the trade — it is still in your history.</Text>}
+          </div>
+        )}
         <div className={styles.historyWrap}>
           {history.length === 0 ? (
             <Text size={13} tone="secondary">No closed trades yet.</Text>
@@ -519,7 +552,10 @@ export default function PortfolioPage() {
               <span data-testid="history-exitcheck" title={stopTooltip(premiumStopPct)}>
                 <Text size={11} tone={ec.kind === 'past-stop' ? 'reject' : ec.kind === 'within-stop' ? 'caution' : 'secondary'}>{ec.label}</Text>
               </span>
-              <button type="button" className={styles.historyRemove} onClick={() => removeHistory(h.id)} aria-label={`Remove ${h.symbol} from history`} title="Remove from history">×</button>
+              <span className={styles.historyActions}>
+                <Link href={`/journal?symbol=${encodeURIComponent(h.symbol)}`} className={styles.historyRemove} aria-label={`Open journal for ${h.symbol}`} title="Open journal for this symbol">↗</Link>
+                <button type="button" className={styles.historyRemove} onClick={() => { setRemovePending(h.id); setRemoveFailed(false); }} aria-label={`Remove ${h.symbol} from history`} title="Remove from history">×</button>
+              </span>
             </div>
             );
           })}

@@ -64,6 +64,20 @@ export default function JournalPage() {
     return () => clearTimeout(t);
   }, [strategyTagInput]);
 
+  // Deep link from Portfolio History: /journal?symbol=NFLX seeds the symbol filter.
+  // Read in a mount effect (not useSearchParams) so prerender needs no Suspense
+  // boundary; `seeded` holds the first sync back until the seed is applied.
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get('symbol');
+    const sym = raw ? raw.trim().toUpperCase() : '';
+    if (sym) {
+      setSymbolInput(sym);
+      setDebouncedSymbol(sym);
+    }
+    setSeeded(true);
+  }, []);
+
   const filters = useMemo<JournalEntryFilters>(() => {
     const f: JournalEntryFilters = {};
     if (debouncedSymbol) f.symbol = debouncedSymbol;
@@ -79,10 +93,11 @@ export default function JournalPage() {
 
   const filtersKey = JSON.stringify(filters);
   useEffect(() => {
+    if (!seeded) return;
     syncEntries(filters);
     // filtersKey is the stable dep — filters itself is a fresh object each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey]);
+  }, [filtersKey, seeded]);
 
   function openCreate() {
     setEditingEntry(null);

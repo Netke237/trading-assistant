@@ -802,7 +802,10 @@
 }
 
 /* PORTFOLIO-HISTORY-INSIGHTS (#663): trade statistics strip, filter bar, sortable headers. */
-.historyRow { grid-template-columns: 64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 28px; }
+.historyRow { grid-template-columns: 64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 56px; }
+.historyActions { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.historyActions a { text-decoration: none; }
+.removeConfirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
 .tradeStats { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
 .tradeStatsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); }
 .tradeStat { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 8px; padding: var(--space-2) var(--space-3); }
