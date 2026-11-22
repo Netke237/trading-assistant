@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/portfolio-sync-state-02708542",
-      "claimed_at": "2026-11-22T16:46:17Z",
-      "expires_at": "2026-11-22T20:14:45Z",
-      "note": "fix lint, PR 690",
-      "task": "PORTFOLIO-SYNC-STATE"
-    }
-  ]
+  "claims": []
 }
