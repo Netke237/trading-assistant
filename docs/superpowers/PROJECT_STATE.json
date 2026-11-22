@@ -11573,23 +11573,23 @@
     {
       "id": "PORTFOLIO-HISTORY-INSIGHTS",
       "name": "Portfolio History tab: trade statistics, return/hold/stop-check columns, filter/search/sort, journal link, remove confirm, stepped realized curve (#663)",
-      "status": "in_progress",
+      "status": "built",
       "tracking_issue": 663,
       "branch": "board/portfolio-history-insights-9e3de20c",
       "size": "L",
       "complexity": 3,
-      "completion_pct": 10,
+      "completion_pct": 70,
       "plan": "docs/superpowers/plans/2026-11-22-portfolio-history-insights-plan.md",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": true,
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "frontend/lib/tradeStats.ts",
         "pattern": "export function computeTradeStats",
-        "note": "Not started: probe expects the symbol absent until T1 lands."
+        "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-22 plan drafted; plan audit round 1 clean (0 gate findings) at 349ce49d by fresh gate-auditor aa13853272a2ff328; tickets next.",
+      "note": "2026-11-22 plan drafted; plan audit round 1 clean (0 gate findings) at 349ce49d by fresh gate-auditor aa13853272a2ff328; tickets #693-#696 built and closed (0933d904, 7f309ede, b0eb215f, 4d8c69fc); coordinator re-ran typecheck, eslint, portfolio+journal suites (13/296) green; origin/main already merged (up to date). Code audit pending.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
