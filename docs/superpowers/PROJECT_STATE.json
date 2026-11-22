@@ -11580,7 +11580,7 @@
       "complexity": 3,
       "completion_pct": 85,
       "plan": "docs/superpowers/plans/2026-11-21-portfolio-sync-state-plan.md",
-      "audit_rounds": 3,
+      "audit_rounds": 4,
       "audit_clean": true,
       "plan_audit_clean": true,
       "verify": {
@@ -11589,14 +11589,15 @@
         "pattern": "syncStatusView",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-21 plan audit 2 rounds, clean (round 1: 1 gate finding G1 fetchedAt stamped at response time, fixed at fcc51bfa; round 2: zero). Built: tickets #685-#688 closed (5765b1c6, 48c07e6d, 01cecd37+0343553e, d867bb75). Local: typecheck ok; portfolio/lib/PnlChart suites pass; step-7 screener suite times out only under parallel load. Production-build console check for #418 not run (hydrateRoot test is the evidence). Code audit round 1 clean (0 gate findings) at d867bb75. SELF-MERGE PENDING, PR #690, audited head d867bb75 (pending is not shipped).",
+      "note": "2026-11-21 plan audit 2 rounds, clean (round 1: 1 gate finding G1 fetchedAt stamped at response time, fixed at fcc51bfa; round 2: zero). Built: tickets #685-#688 closed (5765b1c6, 48c07e6d, 01cecd37+0343553e, d867bb75). Local: typecheck ok; portfolio/lib/PnlChart suites pass; step-7 screener suite times out only under parallel load. Production-build console check for #418 not run (hydrateRoot test is the evidence). Code audit round 1 clean (0 gate findings) at d867bb75. SELF-MERGE PENDING, PR #690, audited head d50f3e20 (code round 2 clean after a prefer-const lint fix; pending is not shipped).",
       "plan_stage": {"rounds": 2, "clean": true, "closed_by": "clean", "reviewer": "fresh gate-auditor subagents (round 1 af75a8a3, round 2 a8f38f54)"},
       "audit_history": [
         {"round": 1, "stage": "plan", "stage_round": 1, "reviewer": "gate-auditor af75a8a3678d5ee6b", "reviewed": "plan @685ffacd", "gate_findings": 1, "findings": ["fetchedAt stamped at response time let a request issued before the first sync resolve after it and make the stale notice state a false cause"], "fixes": ["fetchedAt = request issue time plus monotonic request sequence; tests added (fcc51bfa)"], "outstanding": [], "clean": false},
         {"round": 2, "stage": "plan", "stage_round": 2, "reviewer": "gate-auditor a8f38f542af1cb583", "reviewed": "git diff 685ffacd..fcc51bfa (plan)", "gate_findings": 0, "findings": [], "fixes": [], "outstanding": [], "clean": true},
-        {"round": 3, "stage": "code", "stage_round": 1, "reviewer": "gate-auditor a581bcd49ce9dd823", "reviewed": "git diff 3d6704f3..d867bb75 -- frontend", "gate_findings": 0, "findings": [], "fixes": [], "outstanding": [], "clean": true}
+        {"round": 3, "stage": "code", "stage_round": 1, "reviewer": "gate-auditor a581bcd49ce9dd823", "reviewed": "git diff 3d6704f3..d867bb75 -- frontend", "gate_findings": 0, "findings": [], "fixes": [], "outstanding": [], "clean": true},
+        {"round": 4, "stage": "code", "stage_round": 2, "reviewer": "gate-auditor ac19840a6b0a8686f", "reviewed": "git diff d867bb75..d50f3e20 -- frontend", "gate_findings": 0, "findings": [], "fixes": ["round 1 was clean; CI lint error prefer-const in tradingDay.ts fixed at d50f3e20 (no behaviour change)"], "outstanding": [], "clean": true}
       ],
-      "code_stage": {"rounds": 1, "clean": true, "closed_by": "clean", "reviewer": "gate-auditor a581bcd49ce9dd823 (fresh)", "reviewed": "git diff origin/main..d867bb75 -- frontend (origin/main 3d6704f3)"}
+      "code_stage": {"rounds": 2, "clean": true, "closed_by": "clean", "reviewer": "gate-auditor a581bcd49ce9dd823 (fresh)", "reviewed": "git diff origin/main..d867bb75 -- frontend (origin/main 3d6704f3)"}
     }
   ],
   "already_shipped": [
