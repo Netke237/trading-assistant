@@ -39,7 +39,7 @@ function shiftIso(iso: string, days: number): string {
 export function lastTradingDayEt(now: Date): string {
   const { iso, weekday, minutes } = etParts(now);
   let day = iso;
-  let wd = weekday;
+  const wd = weekday;
   if (wd === 0 || wd === 6) {
     // weekend -> Friday
     day = shiftIso(day, wd === 0 ? -2 : -1);
