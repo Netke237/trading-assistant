@@ -7,6 +7,14 @@
       "expires_at": "2026-11-23T19:29:48Z",
       "note": "board 663 resume",
       "task": "PORTFOLIO-HISTORY-INSIGHTS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/portfolio-editor-layout-c2e7df65",
+      "claimed_at": "2026-11-23T16:29:59Z",
+      "expires_at": "2026-11-23T19:29:59Z",
+      "note": "",
+      "task": "PORTFOLIO-EDITOR-LAYOUT"
     }
   ]
 }
