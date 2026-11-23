@@ -35,7 +35,7 @@
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--text-dim);
+  background: var(--graphic-dim);
 }
 
 .statusDot[data-status="connected"]    { background: var(--pass);    }

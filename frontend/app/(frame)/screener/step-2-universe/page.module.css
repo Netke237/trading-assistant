@@ -366,7 +366,7 @@
 }
 
 .refreshBtn:hover:not(:disabled) {
-  border-color: var(--text-secondary);
+  border-color: var(--graphic-secondary);
   color: var(--text-primary);
 }
 
@@ -445,7 +445,7 @@
 
 .loadBtnRunning {
   border-color: var(--pass);
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .progressWrap {

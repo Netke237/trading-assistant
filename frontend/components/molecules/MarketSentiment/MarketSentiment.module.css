@@ -23,12 +23,12 @@
 }
 
 .aligned {
-  color: var(--pass);
+  color: var(--text-pass);
   font-size: 11px;
 }
 
 .diverging {
-  color: var(--caution);
+  color: var(--text-caution);
   font-size: 11px;
 }
 

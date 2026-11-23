@@ -31,9 +31,9 @@
   flex-shrink: 0;
 }
 
-.info    .icon { color: var(--accent); }
-.action  .icon { color: var(--caution); }
-.critical .icon { color: var(--reject); }
+.info    .icon { color: var(--text-accent); }
+.action  .icon { color: var(--text-caution); }
+.critical .icon { color: var(--text-reject); }
 
 .dismiss {
   display: inline-flex;

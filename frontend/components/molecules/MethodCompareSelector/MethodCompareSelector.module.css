@@ -27,7 +27,7 @@
 .segment[aria-checked='true'],
 .segment[aria-pressed='true'] {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--text-accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
 }
 

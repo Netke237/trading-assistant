@@ -6,7 +6,7 @@
  * History tab of closed trades with the realized P&L views.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
@@ -20,18 +20,30 @@ import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { useAlertStore } from '@/lib/alertStore';
-import { scanPortfolio } from '@/lib/alertEngine';
+import { usePortfolioCycle } from '@/lib/usePortfolioCycle';
+import { useClientClock } from '@/lib/useClientNow';
+import { syncStatusView, positionsLoadState } from '@/lib/syncStatus';
+import { hhmmss } from '@/lib/configHealth';
+import { staleCurveNotice } from '@/lib/staleCurve';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
+import { derivePositionStatus } from '@/lib/positionStatus';
+import { positionRange } from '@/lib/positionRange';
+import { riskAtStopOf } from '@/lib/risk';
 import type { PortfolioPosition } from '@/types/domain';
 import { resolveIv, formatIv, ivColumnLabel, ivBasesOf, type IvBasis } from '@/lib/ivBasis';
 import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
-import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars } from '@/lib/portfolioTotals';
-import { formatMoney, formatSignedPct, readableContract, moneyTone } from '@/lib/portfolioFormat';
+import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAtStopTotal } from '@/lib/portfolioTotals';
+import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
+
+/** `−5.2%` / `+9.6%`, one decimal, Unicode minus. */
+function formatBreachPct(v: number): string {
+  const s = Math.abs(v).toFixed(1);
+  return Number(v.toFixed(1)) < 0 ? `${MINUS}${s}%` : `+${s}%`;
+}
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
@@ -66,7 +78,48 @@ function IvPositionCell({ position }: { position: PortfolioPosition }) {
   );
 }
 
-const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 76px 90px 40px';
+// chart, symbol + contract, DIR, DTE, entry -> now, P&L, IV, Δ · Θ, range, risk, status, edit
+const COLUMNS = '28px minmax(150px, 1.4fr) 56px minmax(80px, 1fr) 110px 104px 60px 112px minmax(210px, 1.6fr) 84px 150px 40px';
+
+const RISK_NEEDS_PLAN = 'Needs a computed exit plan (options only)';
+const RISK_STOCK = 'Risk at stop is computed for options only';
+
+/** Underlying vs stop / T1: a bar from the low price (left) to the high price
+ *  (right), a tick for the structural stop, a marker for the live underlying,
+ *  and the same facts as text so colour is never the only cue. Without a T1 the
+ *  bar has no right end. */
+function RangeCell({ position }: { position: PortfolioPosition }) {
+  const r = positionRange(position);
+  if (!r) {
+    return (
+      <Data size={12} title="Needs an underlying price and a stop">—</Data>
+    );
+  }
+  const low = r.t1 != null ? Math.min(r.stop, r.t1) : null;
+  const high = r.t1 != null ? Math.max(r.stop, r.t1) : null;
+  const at = (level: number) => (low != null && high != null && high > low
+    ? Math.min(1, Math.max(0, (level - low) / (high - low))) * 100
+    : null);
+  const structAt = r.structural != null ? at(r.structural) : null;
+  return (
+    <div className={styles.rangeCell}>
+      <div
+        className={r.t1 == null ? styles.rangeBarOpen : styles.rangeBar}
+        role="img"
+        aria-label={r.text}
+      >
+        {structAt != null && <span className={styles.rangeStruct} style={{ left: `${structAt}%` }} />}
+        {r.fraction != null && (
+          <span
+            className={r.pinned ? styles.rangeMarkerPinned : styles.rangeMarker}
+            style={{ left: `${r.fraction * 100}%` }}
+          />
+        )}
+      </div>
+      <Text size={10} tone="secondary">{r.text}</Text>
+    </div>
+  );
+}
 
 function downloadCsv(filename: string, text: string): void {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
@@ -92,8 +145,11 @@ export default function PortfolioPage() {
   // closing this informational notice also wiped the rejection banner above it.
   const clearPremiumStopDropped = usePortfolioStore((s) => s.clearPremiumStopDropped);
   const clearSyncError = usePortfolioStore((s) => s.clearSyncError);
-  const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
+  const lastSyncAt = usePortfolioStore((s) => s.lastSyncAt);
+  const lastSyncFailedAt = usePortfolioStore((s) => s.lastSyncFailedAt);
+  const firstSyncAt = usePortfolioStore((s) => s.firstSyncAt);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
+  const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
   const [editing, setEditing] = useState<string | null>(null);
   const setSelectedSymbol = usePortfolioUiStore((s) => s.setSelectedSymbol);
   const [tab, setTab] = useState<'open' | 'history'>('open');
@@ -104,42 +160,18 @@ export default function PortfolioPage() {
   const performance = usePerformanceStore((s) => s.performance);
   const fetchHistory = usePerformanceStore((s) => s.fetchHistory);
   const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
+  const performanceFetchedAt = usePerformanceStore((s) => s.fetchedAt);
+  const syncStatus = syncStatusView({ lastSyncAt, lastSyncFailedAt, firstSyncAt });
+  const loadState = positionsLoadState(positions.length, lastSyncAt, lastSyncFailedAt);
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
   const clearAllHistory = usePerformanceStore((s) => s.clearAllHistory);
   const [clearConfirm, setClearConfirm] = useState(false);
 
-  useEffect(() => {
-    // Sync open positions FIRST — GET /api/portfolio writes today's equity
-    // snapshot (including open P&L) when every position got a quote; when any
-    // did not, it skips the write and today's point stays as last written
-    // (NO-LIVE-QUOTE NLQ-1). Only then read performance, otherwise the curve
-    // races ahead of a write and shows a stale value.
-    (async () => {
-      await syncFromBackend();
-      fetchPerformance();
-    })();
-    fetchHistory();
-
-    // Every 30 s: refresh live quotes → run alert engine → refresh equity curve.
-    // Chained so alerts always fire on freshly-fetched prices, not a parallel clock.
-    const runCycle = () => {
-      usePortfolioStore.getState().syncFromBackend?.()
-        .then(() => {
-          const positions = usePortfolioStore.getState().positions;
-          const pct = useSettingsStore.getState().premiumStopPct;
-          const addToast = useAlertStore.getState().addToast;
-          // enabledTypes is read here (not captured in the effect's closure) so
-          // a Settings change takes effect on the very next 30s cycle without
-          // this interval having to be torn down and re-created.
-          const enabledTypes = useAlertStore.getState().config.enabledTypes;
-          for (const r of scanPortfolio(positions, { premiumStopPct: pct, enabledTypes })) addToast(r);
-          usePerformanceStore.getState().fetchPerformance();
-        })
-        .catch(() => {});
-    };
-    const id = setInterval(runCycle, 30_000);
-    return () => clearInterval(id);
-  }, [syncFromBackend, fetchHistory, fetchPerformance]);
+  // 30 s cycle (sync -> alert scan -> performance), paused while the tab is
+  // hidden; see lib/usePortfolioCycle.ts.
+  const { now, refreshNow } = useClientClock();
+  usePortfolioCycle(refreshNow);
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   // Clear the sidebar's selected-symbol note when leaving this page, so a
   // stale selection doesn't linger for the next visit.
@@ -150,18 +182,80 @@ export default function PortfolioPage() {
   // A row with no quote carries 0 defaults, not a price: the totals leave it
   // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
+  // Stale-curve notices (Open P&L and Total value only). `ready`: a performance
+  // request was ISSUED at or after the first successful sync, so the curve is
+  // not older than that sync's snapshot write. `now` is effect-set (hydration).
+  const staleReady = firstSyncAt !== null && performanceFetchedAt !== null && performanceFetchedAt >= firstSyncAt;
+  const unquotedSymbols = Array.from(new Set(positions.filter((p) => p.quoteUnavailable === true).map((p) => p.symbol)));
+  const staleFor = (kind: 'open' | 'equity') => now === null ? null : staleCurveNotice({
+    kind,
+    lastSnapshotDate: performance.lastSnapshotDate,
+    curve: kind === 'open' ? performance.openPnlCurve : performance.equityCurve,
+    positionsCount: positions.length,
+    openPnlToday: openPnL,
+    unquotedSymbols,
+    skippedContracts: performance.snapshotSkippedContracts,
+    now,
+    ready: staleReady,
+  });
+  const staleNotices = { open: staleFor('open'), equity: staleFor('equity') };
   const { thetaDollars } = aggregateGreeks(positions);
+  const riskTotal = riskAtStopTotal(positions);
 
-  const now = new Date();
+  // Stop-breach banners, derived each render: one per row whose derived breach
+  // is the underlying stop or the structural stop. breachPct is
+  // (underlying - level) / underlying, the OPPOSITE sign of positionRange.stopPct.
+  const breachBanners = positions.flatMap((p) => {
+    const { breach } = derivePositionStatus(p, { premiumStopPct });
+    if (breach !== 'stop' && breach !== 'structural') return [];
+    const underlying = p.contract.endsWith('|STOCK') ? p.currentPrice : (p.currentStockPrice ?? 0);
+    const level = breach === 'stop' ? p.stop : p.structuralStop;
+    if (level == null || !(underlying > 0)) return [];
+    const pct = ((underlying - level) / underlying) * 100;
+    const label = breach === 'stop' ? 'stop' : 'structural stop';
+    const text =
+      `${p.symbol} ${readableContract(p.contract)}: ${label} breached. ` +
+      `Underlying ${formatMoney(underlying, { decimals: 2 })} is ${p.direction === 'Bearish' ? 'above' : 'below'} ` +
+      `your ${label} ${formatMoney(level, { decimals: 2 })} (${formatBreachPct(pct)}).` +
+      (p.quoteUnavailable === true && !p.contract.endsWith('|STOCK')
+        ? ' The option has had no quote since the last sync, so its P&L and risk are unknown.'
+        : '');
+    return [{ contract: p.contract, symbol: p.symbol, text }];
+  });
+
+  // Clock-derived labels come from effect-set state only: on the server pass
+  // and the first client render `now` is null and no period text is rendered,
+  // so server HTML and the first hydrated render agree (React #418).
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-  const todayLabel = fmtDay(now);
-  // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
-  const mondayOffset = (now.getDay() + 6) % 7;
-  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
-  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
-  const weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
-  const monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  const yearLabel = String(now.getFullYear());
+  let todayLabel: string | undefined;
+  let weekLabel: string | undefined;
+  let monthLabel: string | undefined;
+  let yearLabel: string | undefined;
+  if (now) {
+    todayLabel = fmtDay(now);
+    // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
+    const mondayOffset = (now.getDay() + 6) % 7;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+    const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+    weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
+    monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    yearLabel = String(now.getFullYear());
+  }
+
+  const TABS = ['open', 'history'] as const;
+  const tabRefs = useRef<Record<'open' | 'history', HTMLButtonElement | null>>({ open: null, history: null });
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const i = TABS.indexOf(tab);
+    let next: 'open' | 'history' | null = null;
+    if (e.key === 'ArrowRight') next = TABS[(i + 1) % TABS.length];
+    else if (e.key === 'ArrowLeft') next = TABS[(i + TABS.length - 1) % TABS.length];
+    else if (e.key === 'Home') next = TABS[0];
+    else if (e.key === 'End') next = TABS[TABS.length - 1];
+    if (next === null) return;
+    e.preventDefault();
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  };
 
   const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
     setCloseError(null);
@@ -181,6 +275,15 @@ export default function PortfolioPage() {
         <Title as="h1" size={24}>Portfolio</Title>
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
+      {syncStatus.kind === 'failed-with-prior' || syncStatus.kind === 'failed-no-prior' ? (
+        <div role="status" className={styles.syncStatus}>
+          <Text size={11} tone="caution">{syncStatus.text}</Text>
+        </div>
+      ) : (
+        <div className={styles.syncStatus}>
+          <Text size={11} tone={syncStatus.kind === 'syncing' ? 'dim' : 'secondary'}>{syncStatus.text}</Text>
+        </div>
+      )}
 
       <BrokerAttemptPanel />
 
@@ -211,11 +314,41 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      <div className={styles.tabs}>
-        <button type="button" className={tab === 'open' ? styles.tabActive : styles.tab} onClick={() => setTab('open')}>
+      {breachBanners.map((b) => (
+        <div key={b.contract} role="alert" className={styles.breachBanner}>
+          <Text size={13} tone="reject">{b.text}</Text>
+          <div className={styles.breachActions}>
+            <button
+              type="button"
+              className={styles.breachBtn}
+              onClick={() => { setTab('open'); setEditing(b.contract); setSelectedSymbol(b.symbol); }}
+            >
+              {`Review ${b.symbol}`}
+            </button>
+            <button type="button" className={styles.breachBtn} onClick={() => setClosing(b.contract)}>
+              Close position…
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <div className={styles.tabs} role="tablist" aria-label="Portfolio views">
+        <button
+          type="button" role="tab" id="portfolio-tab-open" aria-controls="portfolio-panel-open"
+          aria-selected={tab === 'open'} tabIndex={tab === 'open' ? 0 : -1}
+          ref={(el) => { tabRefs.current.open = el; }}
+          className={tab === 'open' ? styles.tabActive : styles.tab}
+          onClick={() => setTab('open')} onKeyDown={onTabKeyDown}
+        >
           Open ({positions.length})
         </button>
-        <button type="button" className={tab === 'history' ? styles.tabActive : styles.tab} onClick={() => setTab('history')}>
+        <button
+          type="button" role="tab" id="portfolio-tab-history" aria-controls="portfolio-panel-history"
+          aria-selected={tab === 'history'} tabIndex={tab === 'history' ? 0 : -1}
+          ref={(el) => { tabRefs.current.history = el; }}
+          className={tab === 'history' ? styles.tabActive : styles.tab}
+          onClick={() => setTab('history')} onKeyDown={onTabKeyDown}
+        >
           History ({history.length})
         </button>
       </div>
@@ -228,13 +361,14 @@ export default function PortfolioPage() {
       </div>
 
       {tab === 'history' && (
-        <>
+        <div role="tabpanel" id="portfolio-panel-history" aria-labelledby="portfolio-tab-history" className={styles.panel}>
         {/* 1. Equity curve — sits above the trade list */}
         <div className={styles.perfViews}>
           <PnlChart
             equityCurve={performance.equityCurve}
             realizedCurve={performance.realizedCurve}
             defaultKind="realized"
+            staleNotices={staleNotices}
           />
         </div>
 
@@ -317,11 +451,21 @@ export default function PortfolioPage() {
 
         {/* 3. Realized P&L heatmap — below the list */}
         <PnlHeatmap history={history} />
-        </>
+        </div>
       )}
 
-      {tab === 'open' && (<>
-        {positions.length === 0 ? (
+      {tab === 'open' && (<div role="tabpanel" id="portfolio-panel-open" aria-labelledby="portfolio-tab-open" className={styles.panel}>
+        {loadState === 'loading' ? (
+        <div className={styles.empty} role="status">
+          <Text size={14} tone="secondary">Syncing positions…</Text>
+        </div>
+      ) : loadState === 'failed' ? (
+        <div className={styles.empty}>
+          <Text size={14} tone="caution">
+            {`Could not load positions. Last sync failed ${hhmmss(lastSyncFailedAt ?? 0)}.`}
+          </Text>
+        </div>
+      ) : loadState === 'empty' ? (
         <div className={styles.empty}>
           <Text size={14} tone="secondary">No open positions.</Text>
           <Text size={12} tone="dim">
@@ -330,33 +474,50 @@ export default function PortfolioPage() {
         </div>
       ) : (
         <div className={styles.tableWrap}>
-          <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
+          <div className={`${styles.tableHeader} ${styles.minW}`} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />
             <Text size={11} tone="dim">SYMBOL</Text>
-            <Text size={11} tone="dim">CONTRACT</Text>
             <Text size={11} tone="dim">DIR</Text>
             <Text size={11} tone="dim">DTE</Text>
             <Text size={11} tone="dim" className={styles.right}>ENTRY → NOW</Text>
             <Text size={11} tone="dim" className={styles.right}>P&L</Text>
             <Text size={11} tone="dim" className={styles.right}>{ivColumnLabel(ivBasesOf(positions))}</Text>
-            <Text size={11} tone="dim" className={styles.right}>Δ</Text>
-            <Text size={11} tone="dim" className={styles.right}>Θ $/DAY</Text>
+            <Text size={11} tone="dim" className={styles.right}>Δ · Θ $/DAY</Text>
+            <Text size={11} tone="dim">UNDERLYING vs STOP / T1</Text>
+            <Text size={11} tone="dim" className={styles.right}>RISK @ STOP</Text>
             <Text size={11} tone="dim">STATUS</Text>
             <span aria-hidden />
           </div>
 
-          <div className={styles.tableBody}>
-            {positions.map((p) => (
+          <div className={`${styles.tableBody} ${styles.minW}`}>
+            {positions.map((p) => {
+              // Status is derived at render from the alert engine's own rules
+              // (the stored p.status is only the creation-time value).
+              const derived = derivePositionStatus(p, { premiumStopPct });
+              const risk = riskAtStopOf(p);
+              return (
               <div key={p.recId} className={styles.rowWrap}>
-                <TableRow status={p.status} columns={COLUMNS}>
+                {/* The row itself stays role="row" (TableRow's onClick would make it
+                    a button holding buttons), so selection lives on this wrapper. */}
+                <div
+                  className={styles.rowSelect}
+                  tabIndex={0}
+                  onClick={() => setSelectedSymbol(p.symbol)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target === e.currentTarget) setSelectedSymbol(p.symbol);
+                  }}
+                >
+                <TableRow status={derived.status} columns={COLUMNS}>
                   <OpenChartButton symbol={p.symbol} />
-                  <Data size={13} weight={500}>{p.symbol}</Data>
-                  <span className={styles.contractCell}>
-                    <span title={p.contract}><Text size={12} tone="secondary">{readableContract(p.contract)}</Text></span>
-                    {p.source === 'manual'     && <span className={styles.srcManual}>MANUAL</span>}
-                    {p.source === 'paper'      && <span className={styles.srcPaper} title={p.sourceLabel ?? 'Paper broker execution'}>PAPER</span>}
-                    {p.source === 'auto-trade' && <span className={styles.srcAuto}  title={p.sourceLabel ?? 'Auto-trade execution'}>AUTO</span>}
-                  </span>
+                  <div className={styles.symbolCell}>
+                    <Data size={13} weight={500}>{p.symbol}</Data>
+                    <span className={styles.contractCell}>
+                      <span title={p.contract}><Text size={11} tone="secondary">{readableContract(p.contract)}</Text></span>
+                      {p.source === 'manual'     && <span className={styles.srcManual}>MANUAL</span>}
+                      {p.source === 'paper'      && <span className={styles.srcPaper} title={p.sourceLabel ?? 'Paper broker execution'}>PAPER</span>}
+                      {p.source === 'auto-trade' && <span className={styles.srcAuto}  title={p.sourceLabel ?? 'Auto-trade execution'}>AUTO</span>}
+                    </span>
+                  </div>
                   <span className={p.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
                     {p.direction === 'Bullish' ? 'Bull' : 'Bear'}
                   </span>
@@ -403,24 +564,37 @@ export default function PortfolioPage() {
                     </div>
                   )}
                   <IvPositionCell position={p} />
-                  <Data size={12} className={styles.right}>
-                    {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
-                  </Data>
                   {(() => {
                     const th = positionThetaDollars(p);
-                    return th == null ? (
-                      <Data size={12} className={styles.right}>—</Data>
-                    ) : (
-                      <Data size={12} className={styles.right} tone={moneyTone(th, 2)}>
-                        {formatMoney(th, { decimals: 2, plus: true })}
-                      </Data>
+                    return (
+                      <span className={styles.right}>
+                        <Data size={12}>{p.delta !== undefined ? p.delta.toFixed(2) : '—'}</Data>
+                        <Text size={12} tone="dim">{' · '}</Text>
+                        {th == null ? (
+                          <Data size={12}>—</Data>
+                        ) : (
+                          <Data size={12} tone={moneyTone(th, 2)}>
+                            {formatMoney(th, { decimals: 2, plus: true })}
+                          </Data>
+                        )}
+                      </span>
                     );
                   })()}
-                  <StatusBadge status={p.status} tooltip={positionStatusTooltip(p.status)} />
+                  <RangeCell position={p} />
+                  {risk != null ? (
+                    <Data size={12} className={styles.right}>{formatMoney(risk)}</Data>
+                  ) : (
+                    <Data size={12} className={styles.right} title={p.contract.endsWith('|STOCK') ? RISK_STOCK : RISK_NEEDS_PLAN}>—</Data>
+                  )}
+                  <div className={styles.statusCell}>
+                    <StatusBadge status={derived.status} tooltip={positionStatusTooltip(derived.status)} />
+                    <Text size={10} tone="secondary">{derived.reason}</Text>
+                  </div>
                   <button
                     type="button"
                     className={styles.editBtn}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const opening = editing !== p.contract;
                       setEditing(opening ? p.contract : null);
                       setSelectedSymbol(opening ? p.symbol : null);
@@ -432,6 +606,7 @@ export default function PortfolioPage() {
                     <PencilIcon />
                   </button>
                 </TableRow>
+                </div>
 
                 {editing === p.contract && (
                   <EditDrawer
@@ -442,11 +617,12 @@ export default function PortfolioPage() {
                   />
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Sticky totals footer */}
-          <div className={styles.footer}>
+          <div className={`${styles.footer} ${styles.minW}`}>
             <div className={styles.footerGroup}>
               <Text size={11} tone="secondary">Deployed</Text>
               <Data size={14} weight={500}>{formatMoney(deployed)}</Data>
@@ -477,6 +653,11 @@ export default function PortfolioPage() {
                 <span className={styles.loss}>{losers}</span>
               </Data>
             </div>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">Risk at stops</Text>
+              <Data size={14} weight={500}>{formatMoney(riskTotal.total)}</Data>
+              {riskTotal.unpriced > 0 && <Text size={10} tone="caution">{`+${riskTotal.unpriced} unpriced`}</Text>}
+            </div>
             {unquoted > 0 && (
               <div className={styles.footerGroup}>
                 <Text size={11} tone="caution">{unquotedNote(unquoted)}</Text>
@@ -492,9 +673,10 @@ export default function PortfolioPage() {
             realizedCurve={performance.realizedCurve}
             openPnlCurve={performance.openPnlCurve}
             defaultKind="open"
+            staleNotices={staleNotices}
           />
         </div>
-      </>)}
+      </div>)}
 
       {tab === 'open' && closing && (() => {
         const p = positions.find((x) => x.contract === closing);

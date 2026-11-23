@@ -37,13 +37,13 @@
 }
 
 .bullish {
-  color: var(--pass);
+  color: var(--text-pass);
   border-color: var(--pass-border);
   background: var(--pass-bg);
 }
 
 .bearish {
-  color: var(--reject);
+  color: var(--text-reject);
   border-color: var(--reject-border);
   background: var(--reject-bg);
 }

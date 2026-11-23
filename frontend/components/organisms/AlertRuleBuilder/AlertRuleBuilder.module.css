@@ -105,7 +105,7 @@
 .logicActive {
   background: color-mix(in srgb, var(--pass) 18%, var(--bg-surface));
   border-color: var(--pass);
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .conditions {
@@ -132,7 +132,7 @@
   padding: 0 8px;
   flex-shrink: 0;
 }
-.removeBtn:hover { color: var(--reject); }
+.removeBtn:hover { color: var(--text-reject); }
 
 .addRow {
   display: flex;

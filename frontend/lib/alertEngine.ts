@@ -15,6 +15,11 @@ import type { PremiumStopSide } from './premiumStop';
  *  (`app/(frame)/alerts/page.tsx`). Change all three together. */
 export const TIME_STOP_DTE = 3;
 
+/** The Portfolio status badge flags a position CAUTION when the underlying is
+ *  within this fraction of its stop or structural stop (on the safe side).
+ *  Not an alert threshold and not a user setting; lib/positionStatus.ts reads it. */
+export const STOP_PROXIMITY_PCT = 0.02;
+
 export interface AlertPosition {
   recId: string;
   symbol: string;
@@ -140,6 +145,25 @@ function effectiveEnabled(
   return explicit ?? (enabledTypes ? enabledTypes.includes(type) : true);
 }
 
+/** The stock price a position's first target (TP_HIT) is compared against:
+ *  the active TP method's `resolvedTpPrice` snapshot when it is a positive
+ *  price, else the live first ladder target when that is positive, else null.
+ *  `> 0`, not just non-null: 0 is never a real stock price. `fromSnapshot`
+ *  says which of the two supplied it (scanPortfolio names the method only when
+ *  the snapshot did). Shared by scanPortfolio and the Portfolio range bar so
+ *  the bar's T1 is the price the alert fires on. */
+function resolveTp(p: Pick<AlertPosition, 'resolvedTpPrice' | 'targets'>): { price: number | null; fromSnapshot: boolean } {
+  const snapshot = p.resolvedTpPrice != null && p.resolvedTpPrice > 0 ? p.resolvedTpPrice : null;
+  if (snapshot != null) return { price: snapshot, fromSnapshot: true };
+  const first = p.targets[0];
+  const ladder = first?.stockPrice != null && first.stockPrice > 0 ? first.stockPrice : null;
+  return { price: ladder, fromSnapshot: false };
+}
+
+export function resolveTpPrice(p: Pick<AlertPosition, 'resolvedTpPrice' | 'targets'>): number | null {
+  return resolveTp(p).price;
+}
+
 export function scanPortfolio(
   positions: AlertPosition[],
   options: ScanOptions = {},
@@ -193,15 +217,13 @@ export function scanPortfolio(
     // which reads the live first ladder target instead — and null is also the
     // fallback for a non-ladder method whose snapshot never got stamped, which
     // keeps a mis-set position alerting on the ladder rather than going silent.
-    const firstTarget = p.targets[0];
     // `> 0`, not just non-null: 0 is never a real stock price (the same
     // convention portfolioStore's floorStop applies to stops), and an upstream
     // `?? 0` fallback can land one here — on either side. Left un-guarded, a 0
     // snapshot OR a 0 ladder target makes `referencePrice >= 0` true on every
     // single tick for a bullish position.
-    const snapshotPrice = p.resolvedTpPrice != null && p.resolvedTpPrice > 0 ? p.resolvedTpPrice : null;
-    const ladderPrice = firstTarget?.stockPrice != null && firstTarget.stockPrice > 0 ? firstTarget.stockPrice : undefined;
-    const tpPrice = snapshotPrice ?? ladderPrice;
+    const { price: tpPrice, fromSnapshot } = resolveTp(p);
+    const snapshotPrice = fromSnapshot ? tpPrice : null;
     const tpMethod = p.activeTpMethod ?? 'ladder';
     // Only label a non-ladder method that actually supplied the price — a
     // method selected without a stamped snapshot fell back to the ladder
@@ -221,7 +243,7 @@ export function scanPortfolio(
         alertType: 'TP_HIT',
         reason: `Target reached — ${p.symbol} at $${referencePrice.toFixed(2)}${tpMethodNote}`,
         price: referencePrice,
-        referenceValue: tpPrice,
+        referenceValue: tpPrice ?? undefined,
         direction: p.direction,
         contract: p.contract,
       });

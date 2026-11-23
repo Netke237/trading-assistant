@@ -46,7 +46,7 @@
 
 .tfActive {
   background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
-  color: var(--pass);
+  color: var(--text-pass);
 }
 
 .chartType {
@@ -73,7 +73,7 @@
 
 .btnActive {
   background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
-  color: var(--pass);
+  color: var(--text-pass);
   border-color: color-mix(in srgb, var(--pass) 40%, transparent);
 }
 
@@ -91,7 +91,7 @@
 
 .modelBtnActive {
   background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
-  color: var(--pass);
+  color: var(--text-pass);
   border-color: color-mix(in srgb, var(--pass) 40%, transparent);
 }
 
@@ -103,7 +103,7 @@
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--pass) 40%, transparent);
   border-radius: 4px;
-  color: var(--pass);
+  color: var(--text-pass);
   cursor: pointer;
 }
 
@@ -116,15 +116,15 @@
 
 .connecting {
   background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .reconnecting {
   background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
-  color: var(--caution);
+  color: var(--text-caution);
 }
 
 .error {
   background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));
-  color: var(--reject);
+  color: var(--text-reject);
 }

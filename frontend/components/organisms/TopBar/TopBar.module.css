@@ -46,7 +46,7 @@
 
 .pillIdle {
   background: var(--neutral-bg);
-  color: var(--neutral);
+  color: var(--text-neutral);
   border-color: var(--neutral);
 }
 
@@ -59,25 +59,25 @@
 
 .pillCompleted {
   background: var(--pass-bg);
-  color: var(--pass);
+  color: var(--text-pass);
   border-color: var(--pass-border);
 }
 
 .pillFailed {
   background: var(--reject-bg);
-  color: var(--reject);
+  color: var(--text-reject);
   border-color: var(--reject-border);
 }
 
 .pillPartial {
   background: var(--caution-bg);
-  color: var(--caution);
+  color: var(--text-caution);
   border-color: var(--caution-border);
 }
 
 .pillCancelled {
   background: var(--neutral-bg);
-  color: var(--neutral);
+  color: var(--text-neutral);
   border-color: var(--neutral);
 }
 

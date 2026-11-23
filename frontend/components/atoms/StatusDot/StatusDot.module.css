@@ -11,5 +11,5 @@
 .caution { background: var(--caution); }
 .reject  { background: var(--reject); }
 .pending { background: var(--neutral); }
-.noData  { background: var(--text-dim); }
+.noData  { background: var(--graphic-dim); }
 .accent  { background: var(--accent); }

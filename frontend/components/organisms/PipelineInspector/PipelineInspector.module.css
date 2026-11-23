@@ -123,19 +123,19 @@
 
 .badgeReject {
   background: color-mix(in srgb, var(--reject) 12%, var(--bg-surface));
-  color: var(--reject);
+  color: var(--text-reject);
   border-color: color-mix(in srgb, var(--reject) 30%, transparent);
 }
 
 .badgePass {
   background: color-mix(in srgb, var(--pass) 12%, var(--bg-surface));
-  color: var(--pass);
+  color: var(--text-pass);
   border-color: color-mix(in srgb, var(--pass) 30%, transparent);
 }
 
 .badgeBottleneck {
   background: color-mix(in srgb, var(--caution) 15%, var(--bg-surface));
-  color: var(--caution);
+  color: var(--text-caution);
   border-color: color-mix(in srgb, var(--caution) 35%, transparent);
   font-weight: 600;
 }
@@ -275,7 +275,7 @@
 .bottleneckTitle {
   font-size: 12px;
   font-weight: 600;
-  color: var(--caution);
+  color: var(--text-caution);
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -300,7 +300,7 @@
   font-size: 11px;
   font-weight: 500;
   background: var(--bg-surface-3);
-  color: var(--caution);
+  color: var(--text-caution);
   border: 1px solid color-mix(in srgb, var(--caution) 40%, transparent);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -464,7 +464,7 @@
 
 .stageNote {
   font-size: 10px;
-  color: var(--caution);
+  color: var(--text-caution);
   line-height: 1.35;
 }
 
@@ -479,7 +479,7 @@
   align-self: flex-start;
   background: transparent;
   border: none;
-  color: var(--accent);
+  color: var(--text-accent);
   font-size: 10px;
   cursor: pointer;
   padding: 2px 0;
@@ -515,7 +515,7 @@
 
 .tickerChip:hover {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 /* ASCII Tree pre box */

@@ -13,7 +13,7 @@
 .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .actionRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .chip { padding: 5px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-surface); white-space: nowrap; }
-.chipFresh { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.chipFresh { border-color: var(--accent); color: var(--text-accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
 .freshToggle, .choice { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .freshToggle[aria-expanded='true'] { border-color: var(--accent); }
 .freshToggle:focus-visible, .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -21,7 +21,7 @@
 .choice { font-size: 12px; padding: 6px 10px; border-radius: 0; }
 .choice:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .choice:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: 0; }
-.choiceOn { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.choiceOn { border-color: var(--accent); color: var(--text-accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
 .choice.choiceOn:last-child { border-left: 1px solid var(--accent); }
 
 .freshPanel { padding: 0 24px; }

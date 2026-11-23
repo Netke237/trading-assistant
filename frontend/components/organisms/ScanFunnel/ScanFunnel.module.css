@@ -40,7 +40,7 @@
 }
 
 .rejected {
-  color: var(--reject);
+  color: var(--text-reject);
   font-size: 11px;
 }
 

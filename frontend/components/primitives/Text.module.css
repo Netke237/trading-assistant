@@ -24,7 +24,7 @@
 /* Tone shortcuts — optional override of default --text-primary */
 .toneSecondary { color: var(--text-secondary); }
 .toneDim       { color: var(--text-dim); }
-.toneAccent    { color: var(--accent); }
-.tonePass      { color: var(--pass); }
-.toneCaution   { color: var(--caution); }
-.toneReject    { color: var(--reject); }
+.toneAccent    { color: var(--text-accent); }
+.tonePass      { color: var(--text-pass); }
+.toneCaution   { color: var(--text-caution); }
+.toneReject    { color: var(--text-reject); }

@@ -844,3 +844,26 @@ describe('STOP-SEMANTICS -- a short stock stop fires on a RISE', () => {
     expect(premium(put(5.6))).toEqual([]);
   });
 });
+
+// PORTFOLIO-RISK-VIEW T2 (#680): the TP selection scanPortfolio uses, exported.
+import { resolveTpPrice } from '@/lib/alertEngine';
+
+describe('resolveTpPrice', () => {
+  it('prefers a positive resolvedTpPrice snapshot', () => {
+    expect(resolveTpPrice(makePosition({ resolvedTpPrice: 130, targets: [{ stockPrice: 120 } as never] }))).toBe(130);
+  });
+  it('falls back to the ladder when the snapshot is null, 0 or negative', () => {
+    for (const s of [null, 0, -1, undefined]) {
+      expect(resolveTpPrice(makePosition({ resolvedTpPrice: s, targets: [{ stockPrice: 120 } as never] }))).toBe(120);
+    }
+  });
+  it('is null when neither is a positive price', () => {
+    expect(resolveTpPrice(makePosition({ targets: [] }))).toBeNull();
+    expect(resolveTpPrice(makePosition({ targets: [{ stockPrice: 0 } as never] }))).toBeNull();
+  });
+  it('agrees with scanPortfolio TP_HIT at the boundary', () => {
+    const p = makePosition({ currentPrice: 130, currentStockPrice: 130, stop: null, resolvedTpPrice: 130, targets: [{ stockPrice: 200 } as never] });
+    expect(scanPortfolio([p]).some((a) => a.alertType === 'TP_HIT')).toBe(true);
+    expect(scanPortfolio([p])[0]?.referenceValue).toBe(resolveTpPrice(p));
+  });
+});

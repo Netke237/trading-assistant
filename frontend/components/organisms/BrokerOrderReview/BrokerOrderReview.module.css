@@ -57,7 +57,7 @@
   color: var(--text-secondary);
 }
 
-.exact > summary { cursor: pointer; color: var(--accent); }
+.exact > summary { cursor: pointer; color: var(--text-accent); }
 
 .pre {
   margin: var(--space-2) 0 0;

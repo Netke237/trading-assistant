@@ -235,6 +235,13 @@ interface PortfolioStoreState {
   premiumStopDropQueue: PremiumStopDropNotice[];
   /** Dismisses the notice on screen (the queue head); the next one shows. */
   clearPremiumStopDropped: () => void;
+  /** Epoch ms of the last GET /api/portfolio whose positions were applied.
+   *  Not persisted (partialize keeps only `positions`). Stamped in syncFromBackend only. */
+  lastSyncAt: number | null;
+  /** Epoch ms of the last failed sync (!res.ok / network / bad JSON). Not persisted. */
+  lastSyncFailedAt: number | null;
+  /** Epoch ms of the FIRST successful sync this page load; set once. Not persisted. */
+  firstSyncAt: number | null;
   clearSyncError: () => void;
   hydrate:        (positions: PortfolioPosition[]) => void;
   /** status: 'ok' saved; 'rejected' backend refused (dropped); 'pending' network
@@ -1339,6 +1346,9 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
       lastExposureBreach: null,
       lastPremiumStopDropped: null,
       premiumStopDropQueue: [],
+      lastSyncAt: null,
+      lastSyncFailedAt: null,
+      firstSyncAt: null,
       // ROUND 10 finding 14 -- these clear SEPARATELY. One action wiping both
       // meant dismissing the (informational) premium-stop notice also silently
       // dropped the (rejection) sync error the user may not have read yet.
@@ -1745,7 +1755,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           const fetchStartedAt = Date.now();
           try {
             const res = await fetch(`${_BASE_URL()}/api/portfolio`);
-            if (!res.ok) return false;
+            if (!res.ok) {
+              set({ lastSyncFailedAt: Date.now() });
+              return false;
+            }
             const remote: BackendPosition[] = await res.json();
             const localForPending = usePortfolioStore.getState().positions;
             const remotePositions = remote.map(fromBackend).map((rp) => {
@@ -1920,9 +1933,13 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
               const queue = s.premiumStopDropQueue.filter((n) => held.has(n.contract));
               return { positions, premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
             });
+            // Stamped only here: the GET succeeded and the positions were applied.
+            const doneAt = Date.now();
+            set((s) => ({ lastSyncAt: doneAt, firstSyncAt: s.firstSyncAt ?? doneAt }));
             return true;
           } catch {
             // network unavailable — keep localStorage state untouched
+            set({ lastSyncFailedAt: Date.now() });
             return false;
           }
         };
