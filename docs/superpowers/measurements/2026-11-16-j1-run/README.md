@@ -15,7 +15,9 @@ parameter: no `active:` write, no `backend/config/*` edit, no `adopt()` call. Ad
 | Thu 11-19 08:33 → 21:52 | The mini PC was put to sleep from the Start menu (System 1074 / Kernel-Power 42; no reboot). The tuner was frozen and resumed; only wall time was lost. `runtime_s` includes the sleep (Position recorded about 15 h), which made the guard end that session early |
 | Fri 11-20 07:06 | Group 1 `pullback_ema` Bullish done: 4 of 5 pass. Its report shows `projected 6.61 h` for the group pass, so **the group pass had recomputed all 5 cells**. Cause: `data_hash` includes the benchmarks of the scoring horizons selected in the call (Swing → Swing, the other four → Position). One-cell calls ({Swing} or {Position}) never matched the group call ({Swing, Position}). Results unaffected; about 30 % extra time |
 | Fri 11-20 08:15 | Kenneth: "Yes, fix it". Wrapper `40a81fb4`: paired per-cell calls (`<h>,Swing`; `Swing,Position`) carry the group's identity, so a finished partner is reused, and the group pass only writes the report. Checked with the tuner's own `select_cells` / `scoring_horizon_for` (every paired call = the group's set) and a stub run of the whole sequence. Finished groups get `GROUP_DONE`; the group pass is window-guarded. The old session was stopped between cells with the STOP file after `breakout_base` Bullish Swing (fails, 7,300 s). New session started 09:09: its `pullback_ema` group pass printed `5 cells (5 finished, skipped by --resume)` and `projected runtime: 0.00 h` (1 min) |
-| — | Run in progress: progress per cell is posted on #115 |
+| Fri 11-20 → Sun 11-22 | Groups 2–4 done (`breakout_base`, `ma_crossover`, `mean_reversion_rsi` Bullish); `mean_reversion_bb` Bullish Swing and Position done. Measured/probe per group: 0.29–1.04 for trend groups, **1.27 for `mean_reversion_rsi`** (the probe is not an upper bound for mean reversion). The 11-21 and 11-22 sessions stopped at 16:44 and 16:13 because the next cell in order did not fit before 01:30: about 9 h idle each day |
+| Mon 11-23 07:45 | Kenneth (via the coordinating session): "Yes, fill the gaps". Wrapper gap filling: when the next call in order does not fit, the first later call that fits runs instead, until nothing fits; group passes run whenever a group's five cells are finished, in any order. Per-call estimate = probe group hours × K (largest measured/probe ratio of finished groups, ≥ 1) × horizon share × 1.3; a hand start between 01:30 and 03:30 is refused. Stub-simulated over five sessions from the real 22-cell state: no call ends after 01:30, every call has both scoring horizons, every group pass computes nothing. Frozen-bar hashes re-checked (0 differences). Installed while the 03:30 session ran (that session keeps the version it parsed) |
+| — | Run in progress: progress per cell is posted on #115. **Open: `mean_reversion_multi` (both directions) does not fit a 22 h session**: its Swing cell is estimated at about 23 h measured-scale (33 h with margin) on the probe × 1.27 basis. The wrapper never starts it and logs it daily; it needs Kenneth's decision |
 
 ## Inputs (fixed for the whole run)
 
@@ -69,7 +71,8 @@ ingestion runs at 02:00. The run skips the MEAS day Tue 2026-11-17 (the trigger 
   fold share (51/169) and the longest `runtime_s` among the group's finished cells.
 
 Queue: Bullish `pullback_ema`, `breakout_base`, `ma_crossover`, then Bullish mean-reversion, then every Bearish
-group. Every invocation uses `--resume`, and each group finishes with a group-level `--resume` pass that writes
+group. Since 11-23 the queue order is a preference, not a barrier: a call that does not fit before 01:30 is
+passed over for the first later one that does (gap filling). Every invocation uses `--resume`, and each group finishes with a group-level `--resume` pass that writes
 its `tuning_report.md`.
 
 ## Next steps (for whoever continues)
