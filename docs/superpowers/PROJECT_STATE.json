@@ -66,7 +66,7 @@
         "pattern": "editSections",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-22 plan written; plan audit round 1 clean (0 gate findings) at a8f09f74. Tickets #691 (T1 f733f9a5), #692 (T2 e3dbe03d) closed. Code audit round 1 clean (0 gate findings) at e3dbe03d. Local: typecheck ok; eslint 0 errors; portfolio suites 12/288 pass."
+      "note": "2026-11-22 plan written; plan audit round 1 clean (0 gate findings) at a8f09f74. Tickets #691 (T1 f733f9a5), #692 (T2 e3dbe03d) closed. Code audit round 1 clean (0 gate findings) at e3dbe03d. Local: typecheck ok; eslint 0 errors; portfolio suites 12/288 pass. SELF-MERGE PENDING, PR #698, audited head e3dbe03d (PR head a83568f8, CI green; pending is not shipped)."
     },
     {
       "id": "OHLCV-ALPACA-DAY-HOLES",
