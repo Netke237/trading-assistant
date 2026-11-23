@@ -15,7 +15,7 @@ import type {
 } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import { worstStatus, STATUS_LABEL } from '@/lib/status';
-import { exposureMark } from '@/lib/portfolioTotals';
+import { exposureMark, riskAtStopDollars } from '@/lib/portfolioTotals';
 
 export function capitalAtRisk(mid: number, contracts: number): number {
   return mid * contracts * 100;
@@ -439,6 +439,14 @@ export function maxLossAtStop(
   contracts: number,
 ): number {
   return Math.max(0, entryPremium - stopContractPrice) * contracts * 100;
+}
+
+/** One open position's max loss at its exit-plan stop -- the rule the Portfolio
+ *  editor's MaxLossBanner and the table / footer / rail all share. Null unless
+ *  an option with an `exitPlan` and `entryPrice > 0`. `contractsOverride` lets
+ *  the editor pass its debounced count (or 1 for risk per contract). */
+export function riskAtStopOf(p: PortfolioPosition, contractsOverride?: number): number | null {
+  return riskAtStopDollars(p, contractsOverride);
 }
 
 /** Resolves the $ threshold `maxLossAtStop` is checked against — a per-trade

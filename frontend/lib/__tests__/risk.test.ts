@@ -704,3 +704,38 @@ describe('exposure of a position without a quote', () => {
     expect(metrics.largestConcentrationPct).toBeCloseTo(12400 / 50000, 10);
   });
 });
+
+// PORTFOLIO-RISK-VIEW T2 (#680): one risk-at-stop rule for table and editor.
+import { riskAtStopOf } from '@/lib/risk';
+import { portfolio20261117 as riskFixture } from '../../test-utils/portfolioFixture20261117';
+
+function withPlan(p: PortfolioPosition, stopContractPrice: number): PortfolioPosition {
+  return { ...p, exitPlan: { stop: { contractPrice: stopContractPrice } } as unknown as ExitPlan };
+}
+
+describe('riskAtStopOf', () => {
+  const [cmg, nclh, bmy] = riskFixture();
+  it('is $206 for CMG, $208 for NCLH and null for BMY (no exit plan)', () => {
+    expect(riskAtStopOf(withPlan(cmg, 0.84))).toBeCloseTo(206, 6);
+    expect(riskAtStopOf(withPlan(nclh, 0.33))).toBeCloseTo(208, 6);
+    expect(riskAtStopOf(bmy)).toBeNull();
+  });
+  it('equals the editor formula maxLossAtStop for every fixture, with and without an override', () => {
+    for (const [p, stop] of [[cmg, 0.84], [nclh, 0.33]] as const) {
+      const q = withPlan(p, stop);
+      expect(riskAtStopOf(q)).toBe(maxLossAtStop(q.entryPrice, stop, q.contracts ?? 1));
+      expect(riskAtStopOf(q, 1)).toBe(maxLossAtStop(q.entryPrice, stop, 1));
+      expect(riskAtStopOf(q, 3)).toBe(maxLossAtStop(q.entryPrice, stop, 3));
+    }
+  });
+  it('is null for a stock, and for entryPrice <= 0', () => {
+    expect(riskAtStopOf(withPlan({ ...cmg, contract: 'CMG|STOCK' }, 0.84))).toBeNull();
+    expect(riskAtStopOf(withPlan({ ...cmg, entryPrice: 0 }, 0.84))).toBeNull();
+  });
+  it('floors at 0 when the stop reprices above entry', () => {
+    expect(riskAtStopOf(withPlan(cmg, 5))).toBe(0);
+  });
+  it('defaults contracts to 1 when absent', () => {
+    expect(riskAtStopOf(withPlan({ ...cmg, contracts: undefined }, 0.84))).toBeCloseTo(206, 6);
+  });
+});

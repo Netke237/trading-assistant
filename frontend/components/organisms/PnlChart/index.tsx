@@ -10,10 +10,11 @@
  * GET /api/portfolio/performance.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
   LineSeries,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
   type Time,
@@ -21,6 +22,7 @@ import {
 import { useThemeStore } from '@/lib/theme';
 import { Text } from '@/components/primitives';
 import type { PerfPoint } from '@/lib/performanceStore';
+import type { StaleCurveNotice } from '@/lib/staleCurve';
 import styles from './PnlChart.module.css';
 
 type SeriesKind = 'open' | 'equity' | 'realized';
@@ -32,6 +34,8 @@ interface PnlChartProps {
   openPnlCurve?: PerfPoint[];
   height?: number;
   defaultKind?: SeriesKind;
+  /** Stale-curve notices for the two snapshot-based curves; never used for realized. */
+  staleNotices?: { open: StaleCurveNotice | null; equity: StaleCurveNotice | null };
 }
 
 function token(name: string): string {
@@ -63,7 +67,7 @@ function resample(points: PerfPoint[], gran: Granularity): PerfPoint[] {
   return Array.from(lastByKey.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 260, defaultKind = 'equity' }: PnlChartProps) {
+export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 260, defaultKind = 'equity', staleNotices }: PnlChartProps) {
   const theme = useThemeStore((s) => s.theme);
   const [kind, setKind] = useState<SeriesKind>(defaultKind);
   const [gran, setGran] = useState<Granularity>('day');
@@ -72,6 +76,26 @@ export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 26
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const [chartVersion, setChartVersion] = useState(0);
+  const dashRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const [gap, setGap] = useState<{ left: number; width: number } | null>(null);
+
+  // The notice is computed by the page from the RAW curves, so Days/Weeks/Months
+  // never change it. The Realized curve (closed trades, not snapshots) has none.
+  const notice = kind === 'realized' ? null : (staleNotices?.[kind] ?? null);
+  const noticeRef = useRef<StaleCurveNotice | null>(notice);
+  noticeRef.current = notice;
+
+  const recomputeGap = useCallback(() => {
+    const chart = chartRef.current;
+    const el = containerRef.current;
+    const n = noticeRef.current;
+    if (!chart || !el || !n) { setGap(null); return; }
+    const left = chart.timeScale().timeToCoordinate(n.lastPointDate as Time);
+    if (left === null || left === undefined) { setGap(null); return; }
+    const right = el.clientWidth - chart.priceScale('right').width();
+    const width = right - left;
+    setGap(width > 0 ? { left, width } : null);
+  }, []);
 
   const data = useMemo(() => {
     const source =
@@ -119,27 +143,68 @@ export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 26
     seriesRef.current = line;
     setChartVersion((v) => v + 1);
 
-    const applySize = () => chart.applyOptions({ width: el.clientWidth });
+    const applySize = () => {
+      chart.applyOptions({ width: el.clientWidth });
+      recomputeGap();
+    };
     const ro = new ResizeObserver(applySize);
     ro.observe(el);
     window.addEventListener('resize', applySize);
+    chart.timeScale().subscribeVisibleTimeRangeChange(recomputeGap);
 
     return () => {
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(recomputeGap);
       ro.disconnect();
       window.removeEventListener('resize', applySize);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      dashRef.current = null; // removed with the chart
     };
-  }, [theme, height]);
+  }, [theme, height, recomputeGap]);
 
-  // Data update — replaces series data; re-runs after a theme rebuild.
+  // Data update — replaces series data; re-runs after a theme rebuild. When the
+  // curve is stale, one whitespace item at the reference day stretches the time
+  // axis to it, and (Open P&L only) a dashed segment runs from the last point to
+  // the live figure the notice states.
   useEffect(() => {
     const line = seriesRef.current;
-    if (!line) return;
-    line.setData(data.map((p) => ({ time: p.date as Time, value: p.value })));
-    chartRef.current?.timeScale().fitContent();
-  }, [data, chartVersion]);
+    const chart = chartRef.current;
+    // chartVersion 0 is the render before the chart effect's bump: skip it, the
+    // bumped run does the work (avoids creating then removing the dashed series).
+    if (!line || !chart || chartVersion === 0) return;
+    const points: Array<{ time: Time; value?: number }> = data.map((p) => ({ time: p.date as Time, value: p.value }));
+    if (notice) points.push({ time: notice.referenceDay as Time });
+    line.setData(points as Parameters<typeof line.setData>[0]);
+
+    let dash: ISeriesApi<'Line'> | null = null;
+    if (notice && notice.liveValue !== null) {
+      const last = data.find((p) => p.date === notice.lastPointDate);
+      if (last) {
+        dash = chart.addSeries(LineSeries, {
+          color: token('--accent') || '#2962FF',
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        }) as ISeriesApi<'Line'>;
+        dash.setData([
+          { time: last.date as Time, value: last.value },
+          { time: notice.referenceDay as Time, value: notice.liveValue },
+        ]);
+        dashRef.current = dash;
+      }
+    }
+    chart.timeScale().fitContent();
+    recomputeGap();
+
+    return () => {
+      // After a theme rebuild chartRef is already null (the chart, and with it
+      // this series, was disposed), so only remove from a live chart.
+      if (dash && chartRef.current === chart) chart.removeSeries(dash);
+      if (dashRef.current === dash) dashRef.current = null;
+    };
+  }, [data, chartVersion, notice, recomputeGap]);
 
   const empty = data.length === 0;
 
@@ -187,7 +252,20 @@ export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 26
         </div>
       </div>
       <div className={styles.chartArea}>
+        {notice && (
+          <p role="note" className={styles.notice}>
+            <Text size={12} tone="caution">{notice.text}</Text>
+          </p>
+        )}
         <div ref={containerRef} className={styles.chart} />
+        {notice && gap && (
+          <div
+            data-testid="stale-gap"
+            aria-hidden="true"
+            className={styles.gap}
+            style={{ left: gap.left, width: gap.width, top: containerRef.current?.offsetTop ?? 0, height }}
+          />
+        )}
         {empty && (
           <div className={styles.empty}>
             <Text size={12} tone="secondary">No performance data yet.</Text>
