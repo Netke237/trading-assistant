@@ -62,3 +62,13 @@
   border-color: var(--accent);
   color: var(--accent-text);
 }
+
+.notice {
+  margin: 0 0 var(--space-2);
+}
+
+.gap {
+  position: absolute;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--caution) 14%, transparent);
+}

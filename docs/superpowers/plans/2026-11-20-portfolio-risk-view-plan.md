@@ -1,0 +1,50 @@
+# PORTFOLIO-RISK-VIEW plan (board item #660, umbrella #656)
+
+Goal: show each open position's risk in the Portfolio table itself. Spec = issue #660 scope items 1-7 and the #656 mapping rows 7, 12 (position), 19, 21, 23, 24, 25, 33, 38. Nothing existing is removed. Frontend only; no backend, no schema.
+
+## Interpretations (recorded, not asked: each is the narrowest reading of the item text)
+
+- **2% band** is a named exported constant `STOP_PROXIMITY_PCT = 0.02` in `frontend/lib/alertEngine.ts` beside `TIME_STOP_DTE` (the existing precedent for a threshold the alert settings share), not a user setting. Distance is `|level - underlying| / underlying`, the same base the range text uses ("struct -1.1%").
+- **Banner** shows for rows whose derived REJECT comes from the underlying stop or the structural stop. A row REJECT only by premium stop gets the badge and reason but no banner (the item text names "stop" breaches and uses the underlying-vs-stop sentence).
+- **Status never reads per-position alert overrides**; it calls `scanPortfolio` with the position's `alertOverrides` removed and `enabledTypes` undefined (all types on), so badge and alert agree by construction.
+- **Risk @ stop** keeps the editor's rule exactly: options only, needs `exitPlan`; otherwise null -> "—" with a title. Stocks show "—" (the editor shows no max-loss row for them either).
+- `PortfolioPosition.status` in the store stays what it is at creation; the page and rail derive status at render. Before T3 closes the implementer greps every reader of `.status` on a `PortfolioPosition` and records which ones switch to the derived value (only Portfolio page's TableRow/StatusBadge in scope; others stay and are listed in the T3 report).
+
+## Tasks (each = one ticket; sequential, blockers first)
+
+### T1 - Derived position status (`frontend/lib/positionStatus.ts`, new) + constant + tooltip
+Pure `derivePositionStatus(p: PortfolioPosition, opts: {premiumStopPct: number; now?: Date}): {status: Status; reason: string; breach: 'stop'|'structural'|'premium'|null}`.
+- Build `AlertPosition` from the row exactly as the page does today (the object passed to `scanPortfolio` is the `PortfolioPosition`), but with `alertOverrides: {}`; call `scanPortfolio([p'], {premiumStopPct})`.
+- REJECT precedence: `STOP_REACHED` -> "Stop breached" (breach `stop`); `STRUCTURAL_STOP_BREACHED` -> "Structural stop breached"; `PREMIUM_STOP` -> "Premium stop hit". If several, order stop, structural, premium.
+- Else CAUTION: nearest of stop / structural stop within `STOP_PROXIMITY_PCT` on the safe side (bullish: underlying above level; bearish: below) -> reason `"{x.x}% above stop"` / `"{x.x}% above struct. stop"` (bearish: "below"); `TIME_STOP` alert -> option "≤3 DTE" (use `TIME_STOP_DTE`), stock "Hold {n}d reached"; option with `quoteUnavailable` (or `currentPrice <= 0`) while the underlying is known -> "No option quote".
+- Else PASS: `TP_HIT` -> "Target 1 reached"; otherwise "Between stop and T1".
+- NO_DATA: option with no option quote and no underlying (`currentStockPrice` unset or <= 0); stock with `quoteUnavailable` or `currentPrice <= 0`. Reason "No quote".
+- Underlying = `currentPrice` for `|STOCK`, `currentStockPrice` for options (same as `scanPortfolio`'s `referencePrice`). Stop-less rows skip proximity.
+- Add `STOP_PROXIMITY_PCT` to `alertEngine.ts` (export only; no behaviour change there). Update `positionStatusTooltip` in `statusTooltips.ts`: PENDING/NO_DATA text kept; PASS/CAUTION/REJECT text states the rule (stop/structural/premium breach = at risk; within 2% of a stop, time stop or no option quote = flagged; same rules as the alerts). Update `statusTooltips.literal.test.ts` if it pins the old text.
+Tests (`frontend/lib/__tests__/positionStatus.test.ts`): every branch, bullish and bearish, option and stock, quoted and unquoted; precedence; boundary exactly 2.0% (not caution above 2%, caution at <= 2%... implementer pins `<=`); a fixture-agreement test asserting that for every fixture the REJECT/PASS-by-TP outcome equals the presence of the corresponding `scanPortfolio` reason; alert overrides on the row do not change the badge; 2026-11-17 fixtures: BMY (Bullish option, `quoteUnavailable`, underlying 60.95, stop 64.13) -> REJECT "Stop breached"; CMG (underlying 36.06, structural stop 35.66) -> CAUTION "1.1% above struct. stop"; NCLH -> PASS.
+
+### T2 - Shared risk-at-stop, range and totals helpers (`frontend/lib/risk.ts`, `frontend/lib/positionRange.ts` new, `frontend/lib/portfolioTotals.ts`)
+- `riskAtStopOf(p, contractsOverride?)` in `risk.ts`: null unless option (`!endsWith('|STOCK')`), `exitPlan` present and `entryPrice > 0`; else `maxLossAtStop(p.entryPrice, p.exitPlan.stop.contractPrice, contractsOverride ?? p.contracts ?? 1)`. `EditDrawer.tsx` `MaxLossBanner` calls it (passing its debounced contracts) in place of its inline `maxLossAtStop` call for `lossAtStop` and `riskPerContract` (with 1) so the table and editor cannot diverge. No change to what the editor renders.
+- `riskAtStopTotal(positions)` in `portfolioTotals.ts`: `{total, priced, unpriced}` over all positions (a position with a null risk is unpriced; quote not required).
+- `positionRange(p)` in `positionRange.ts`: `{stop, structural, t1, underlying, fraction (0..1, clamped), pinned: 'left'|'right'|null, stopPct, structPct, t1Pct, text}`; stop at left, T1 at right for bullish, mirrored for bearish; T1 = same price the alert uses (`resolvedTpPrice > 0` else `targets[0].stockPrice > 0`, replicating `scanPortfolio`'s snapshot-then-ladder rule; extract that selection from `alertEngine.ts` into an exported `resolveTpPrice(p)` used by both, with a test pinning identical behaviour); percentages are `(level - underlying)/underlying*100`, one decimal, signed with the Unicode minus via `formatSignedPct`-style helper already in `portfolioFormat.ts`. Null when the underlying or the stop is missing (T1 missing -> bar without right end, text without T1).
+Tests: risk fixtures $206 / $208 / null (BMY, no exit plan); editor-and-table equality for every fixture; totals "$414, 1 unpriced"; range bullish, bearish, pinned left/right, missing parts; `resolveTpPrice` parity with existing alertEngine tests (all existing `alertEngine.test.ts` stay green).
+
+### T3 - Table UI (`frontend/app/(frame)/portfolio/page.tsx`, `page.module.css`)
+- Status cell: `derivePositionStatus` per row (premiumStopPct from `useSettingsStore`), badge + reason line under it, tooltip via `positionStatusTooltip`; `TableRow status` uses the derived status.
+- Contract moves under the symbol in the symbol cell (readable label, raw key in `title`, source badge travels with it); the CONTRACT column is removed from the grid (information moved, not dropped).
+- New columns: "UNDERLYING vs STOP / T1" (bar with stop at left, T1 at right, structural tick, live marker, text line, plus visually-hidden text equivalent / `aria-label`; colour is never the only cue) and "RISK @ STOP" ("$206"; "—" with `title` "Needs a computed exit plan (options only)" / why).
+- "Δ · Θ $/day" single column "0.45 · −$1.10" (each part "—" when absent), replacing the two columns.
+- Every other column unchanged. Table scrolls horizontally inside its card below its min width (`overflow-x: auto` on the wrapper; header, rows and footer share a `min-width`).
+- Row click selects: `setSelectedSymbol(p.symbol)`; row has `tabIndex=0`, Enter selects; the pencil and chart buttons stop propagation; pencil still opens the editor.
+Tests: page-level render test (existing portfolio test patterns in `frontend/app/(frame)/portfolio/__tests__/`) for each new column with the 3 fixtures, row click sets the store, Enter selects, pencil does not double-select incorrectly, all previously-present texts still present (symbol, contract label, source badge, DIR, DTE, entry -> now, P&L, IV, edit button, empty state).
+
+### T4 - Banner, footer total, rail total (`portfolio/page.tsx`, `@contextRail/portfolio/page.tsx`)
+- Stop-breach banner above the tabs (below the existing banners), one per row with `breach` of `stop` or `structural`: "{SYMBOL} {contract label}: stop breached. Underlying $60.95 is below your stop $64.13 (−5.2%)." (structural: "structural stop"; bearish: "above"); the parenthesised figure is `breachPct = (underlying - level) / underlying * 100`, one decimal, Unicode minus (BMY: (60.95 - 64.13)/60.95 = -5.2%); a bullish breach is therefore negative ("below") and a bearish breach positive ("above"). The banner must NOT reuse `positionRange.stopPct`, whose sign is the opposite ((level - underlying)/underlying). Both signs are pinned by tests (BMY bullish `-5.2%`, one bearish fixture with a positive figure); when `quoteUnavailable`: second sentence "The option has had no quote since the last sync, so its P&L and risk are unknown."; `role="alert"`; no dismiss while the breach holds (it disappears when the status no longer breaches). Buttons: "Review {SYMBOL}" (sets `editing` to the row and selected symbol, switches to the Open tab) and "Close position…" (`setClosing(contract)`).
+- Footer: "Risk at stops" `$414` + "+1 unpriced" (`riskAtStopTotal`); rail Totals: "Risk at stops" under Positions, same text.
+Tests: banner text for BMY exactly as the item gives; banner absent when no breach; buttons call the handlers; footer and rail show "$414" and "+1 unpriced" for the fixture set; unpriced note absent when all priced.
+
+## Acceptance (from #660) mapped
+1 unit tests all status branches + badge/`scanPortfolio` agreement: T1. 2 fixtures BMY/CMG/NCLH + risk $206/$208/— + total $414 +1 unpriced: T1-T4. 3 table = editor: T2. 4 every tagged mapping row present, nothing removed: T3 test + final acceptance walk. 5 typecheck + full tests green: every ticket; coordinator reruns.
+
+## Gate focus for auditors
+A wrong status or wrong risk number shown to the user (badge disagreeing with `scanPortfolio`; wrong sign / direction mirroring; a risk figure that differs from the editor; the unpriced count wrong; the banner sentence naming the wrong direction or level). No persisted data is touched.

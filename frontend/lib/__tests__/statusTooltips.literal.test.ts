@@ -66,9 +66,9 @@ describe('GENERIC_STATUS_TOOLTIP', () => {
 
 describe('positionStatusTooltip', () => {
   it.each([
-    ['PASS',    'Position status: healthy — no known issues since entry.'],
-    ['CAUTION', 'Position status: flagged — review this position, something about it warrants a closer look.'],
-    ['REJECT',  'Position status: at risk — this position has triggered a warning condition.'],
+    ['PASS',    'Position status: healthy — no stop, structural stop or premium stop is breached, and nothing is within 2% of a stop. Same rules as the alerts.'],
+    ['CAUTION', 'Position status: flagged — the underlying is within 2% of a stop or structural stop, a time stop is reached, or the option has no live quote. Same rules as the alerts.'],
+    ['REJECT',  'Position status: at risk — the stop, structural stop or premium stop is breached. Same rules as the alerts.'],
     ['PENDING', 'Position status is not actively tracked post-entry — this reflects the state at order time, not a live re-score.'],
     ['NO_DATA', 'No status data available for this position.'],
   ] as const)('%s', (s, expected) => {

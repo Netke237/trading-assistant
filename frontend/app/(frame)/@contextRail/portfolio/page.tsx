@@ -12,7 +12,7 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
 import { Text, Data } from '@/components/primitives';
-import { openTotals, unquotedNote, aggregateGreeks, deltaDollarsNote } from '@/lib/portfolioTotals';
+import { openTotals, unquotedNote, aggregateGreeks, deltaDollarsNote, riskAtStopTotal } from '@/lib/portfolioTotals';
 import { formatMoney, moneyTone } from '@/lib/portfolioFormat';
 import styles from './page.module.css';
 
@@ -31,6 +31,7 @@ export default function PortfolioContextRail() {
   // Positions without a quote are left out of the totals (NO-LIVE-QUOTE NLQ-1).
   const { deployed, openPnL, unquoted } = openTotals(positions);
   const note = unquotedNote(unquoted);
+  const riskTotal = riskAtStopTotal(positions);
   const { deltaShares, thetaDollars, deltaDollars, deltaDollarsExcluded } = aggregateGreeks(positions);
   const ddNote = deltaShares != null ? deltaDollarsNote(deltaDollarsExcluded) : null;
 
@@ -46,6 +47,11 @@ export default function PortfolioContextRail() {
             </Data>
           </Row>
           <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{positions.length}</Data></Row>
+          <Row>
+            <Text size={12} tone="secondary">Risk at stops</Text>
+            <Data size={12}>{formatMoney(riskTotal.total)}</Data>
+          </Row>
+          {riskTotal.unpriced > 0 && <Text size={11} tone="caution">{`+${riskTotal.unpriced} unpriced`}</Text>}
           {note && <Text size={11} tone="caution">{note}</Text>}
         </div>
       </RailSection>

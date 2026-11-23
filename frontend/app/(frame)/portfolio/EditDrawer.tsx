@@ -11,7 +11,7 @@
  * tests need.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
@@ -19,7 +19,7 @@ import { flushPendingPositionPatches, useIsSymbolHeld, usePortfolioStore } from 
 import { rejectionMessage } from '@/lib/portfolioRejection';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
+import { riskAtStopOf, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { useAlertStore } from '@/lib/alertStore';
@@ -70,6 +70,12 @@ export function EditDrawer({
   onChange: (patch: Partial<PortfolioPosition>) => void;
   onRemove: () => void;
 }) {
+  const sectionIdBase = useId();
+  const secRiskId = `${sectionIdBase}-risk`;
+  const secTargetsId = `${sectionIdBase}-targets`;
+  const secExitId = `${sectionIdBase}-exit`;
+  const secAlertsId = `${sectionIdBase}-alerts`;
+  const secPositionId = `${sectionIdBase}-position`;
   // Send any debounced-but-not-yet-fired edit immediately when this drawer
   // instance goes away — covers both its own close button and the parent
   // swapping `editing` to a different row (which unmounts this instance
@@ -450,199 +456,214 @@ export function EditDrawer({
         )}
       </div>
 
-      <div className={styles.editGrid}>
-        <EditField
-          label="Stop"
-          // DIRECTION-AWARE. The old copy said "drops below" unconditionally,
-          // which is the wrong instruction for every Bearish position -- a
-          // bearish stop sits ABOVE the price and fires on a RISE.
-          hint={
-            position.direction === 'Bearish'
-              ? 'Exit if the underlying stock rises above this price (invalidates the trade thesis).'
-              : 'Exit if the underlying stock drops below this price (invalidates the trade thesis).'
-          }
-          value={position.stop ?? 0}
-          distance={formatStockStopDistance(position.stop, effectiveStockEntry, position.direction)}
-          range={stockLevelRange}
-          onChange={(n) => onChange({ stop: n > 0 ? n : null })}
-        />
-        <EditField
-          label="Structural level"
-          hint="Chart-based level (order block / swing level) from Check structure, with its own alert. It is not widened to the ATR floor, so it can sit much closer than the Stop. Optional — 0 means none was captured."
-          value={position.structuralStop ?? 0}
-          distance={formatStockStopDistance(position.structuralStop, effectiveStockEntry, position.direction)}
-          range={stockLevelRange}
-          onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
-        />
-        <PremiumStopEditor
-          position={position}
-          globalPremiumStopPct={globalPremiumStopPct}
-          onChange={onChange}
-        />
-        <TargetEditor
-          targets={position.targets}
-          onChange={(targets) => onChange({ targets })}
-        />
-        {!position.contract.endsWith('|STOCK') && (
-          <ExitPlanEditor position={position} onChange={onChange} />
-        )}
-        {!position.contract.endsWith('|STOCK') && (
-          <MaxLossBanner position={position} onChange={onChange} />
-        )}
-        {/* The RECORD (what was picked) sits directly above the SELECTOR (what
-            drives the alert today), because the whole point of §4.3's degraded
-            rows is that those two can legitimately disagree — and a trader can
-            only see that they disagree if both are on screen together. */}
-        <PickedMethodRecord position={position} />
-        <TpMethodSelector
-          position={position}
-          mcTargetPrice={mcRungPrice}
-          onChange={onChange}
-        />
-        <AlertOverridesEditor position={position} onChange={onChange} />
-        <div className={styles.addedFill}>
+      <div className={styles.editSections}>
+        <section className={styles.editSection} aria-labelledby={secRiskId}>
+          <h3 id={secRiskId} className={styles.editSectionTitle}>Risk &amp; stops</h3>
           <EditField
-            label="Contracts"
-            hint="Number of option contracts held."
-            value={savedQty}
-            // A quantity, not a level: 0 contracts is not "no override", it is a
-            // position that does not exist. Closing one is the row's Close
-            // button, not a 0 typed here.
-            zeroClears={false}
-            draftEpoch={fillErrorAt}
-            // An increase is an added fill. Hold it and ask for the price.
-            // A decrease still commits on blur, as it always has.
-            onCommit={(n) => {
-              const next = Math.max(1, Math.round(n));
-              if (next > savedQty) {
-                setHeldTotal(next);
-                setPriceRejected(null);
-                return false;
-              }
-              setHeldTotal(null);
-              return true;
-            }}
-            onChange={(n) => onChange({ contracts: Math.max(1, Math.round(n)) })}
+            label="Stop"
+            // DIRECTION-AWARE. The old copy said "drops below" unconditionally,
+            // which is the wrong instruction for every Bearish position -- a
+            // bearish stop sits ABOVE the price and fires on a RISE.
+            hint={
+              position.direction === 'Bearish'
+                ? 'Exit if the underlying stock rises above this price (invalidates the trade thesis).'
+                : 'Exit if the underlying stock drops below this price (invalidates the trade thesis).'
+            }
+            value={position.stop ?? 0}
+            distance={formatStockStopDistance(position.stop, effectiveStockEntry, position.direction)}
+            range={stockLevelRange}
+            onChange={(n) => onChange({ stop: n > 0 ? n : null })}
           />
-          <Text size={10} tone="dim">{`Average entry $${position.entryPrice.toFixed(2)}`}</Text>
-          {pendingIncrease != null && (
-            <div className={styles.addedFillRow}>
-              <label className={styles.editField}>
-                <Text size={11} tone="secondary">Added fill price</Text>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className={styles.editInput}
-                  value={fillPrice}
-                  aria-label="Added fill price"
-                  onChange={(e) => { setPriceRejected(null); setFillPrice(e.target.value); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void confirmFill(); } }}
-                />
-              </label>
-              <button type="button" className={styles.mcBtn} onClick={() => { void confirmFill(); }}>
-                Confirm added fill
-              </button>
-            </div>
+          <EditField
+            label="Structural level"
+            hint="Chart-based level (order block / swing level) from Check structure, with its own alert. It is not widened to the ATR floor, so it can sit much closer than the Stop. Optional — 0 means none was captured."
+            value={position.structuralStop ?? 0}
+            distance={formatStockStopDistance(position.structuralStop, effectiveStockEntry, position.direction)}
+            range={stockLevelRange}
+            onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
+          />
+          <PremiumStopEditor
+            position={position}
+            globalPremiumStopPct={globalPremiumStopPct}
+            onChange={onChange}
+          />
+          {!position.contract.endsWith('|STOCK') && (
+            <MaxLossBanner position={position} onChange={onChange} />
           )}
-          {priceRejected && <Text size={10} tone="caution">{priceRejected}</Text>}
-          {exposureBreach && <Text size={10} tone="caution">{rejectionMessage(exposureBreach)}</Text>}
-        </div>
-        <EditField
-          label="Current price"
-          // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
-          // quote for carries a 0 currentPrice that is not a price. The field
-          // shows it as unknown -- empty, with a placeholder -- exactly as the
-          // table shows "—", never as 0.
-          hint={position.quoteUnavailable
-            ? 'Quote unavailable'
-            : 'Manual override — will refresh from broker in live mode.'}
-          value={position.currentPrice}
-          unknown={position.quoteUnavailable === true}
-          placeholder="— (no quote)"
-          // 0 is refused here (decision Q6): it would write `currentPrice: 0`
-          // and a -100% P&L onto the row. The way to mark a position worthless
-          // is to CLOSE it at $0, which the close path supports end to end.
-          //
-          // How long a typed value survives (P2-14, corrected): it is not sent
-          // to the backend -- `toUpdatePayload` omits currentPrice/pnlDollar/
-          // pnlPct -- but it IS persisted to localStorage (partialize keeps
-          // `positions`), so it survives a reload for as long as syncs fail.
-          // A successful sync's `fromBackend` rewrites all three.
-          zeroClears={false}
-          zeroMessage="Must be greater than 0 — to mark it worthless, close the position at $0 (Close button). Kept the previous value."
-          onChange={(n) => {
-            const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
-            const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
-            const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
-            // A typed price IS a mark: the row is no longer "no quote" until the
-            // next sync says otherwise (fromBackend rewrites the flag). Without
-            // this the override would be written while the field, the table and
-            // the totals all kept showing it as unknown.
-            onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
-            setPriceEditedSinceEstimate(true);
-          }}
-        />
-      </div>
-
-      <div className={styles.mcSection}>
-        <Text size={12} weight={500}>Monte Carlo estimate</Text>
-        <div className={styles.mcRow}>
-          <button type="button" className={styles.mcBtn} onClick={runEstimate} disabled={mcLoading || estimateDisabled}>
-            <Text size={12} weight={500}>{mcLoading ? 'Estimating…' : 'Estimate'}</Text>
-          </button>
-          {mcError && <Text size={11} tone="reject">{mcError}</Text>}
-        </div>
-        {isStock && !(position.currentPrice > 0) && (
-          <Text size={11} tone="dim">
-            No live current price yet — can&apos;t estimate until a price is available.
-          </Text>
-        )}
-        {!hasStop && <Text size={11} tone="dim">No stop set</Text>}
-        {stopBreached && (
-          <Text size={11} tone="dim">
-            The stop is already on the wrong side of the current price — sync the position&apos;s stop before estimating.
-          </Text>
-        )}
-        {structuralStopBreached && (
-          <Text size={11} tone="dim">
-            The structural level is already on the wrong side of the current price — sync the position&apos;s structural level before estimating.
-          </Text>
-        )}
-        {isStock && position.currentPrice > 0 && !stopBreached && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
-          <Text size={11} tone="dim">
-            Every target has already been reached — add a new target to estimate further upside.
-          </Text>
-        )}
-        {mcResult?.horizonNote && (
-          <Text size={10} tone="dim">Chance of reaching each target within {mcResult.horizonNote}</Text>
-        )}
-        {mcResult && (
-          <div className={styles.mcResultRow}>
-            {mcResult.targets.map((t, i) => (
-              <div key={`${t.label}-${i}`}>
-                <Text size={10} tone="dim">{t.label.toUpperCase()}</Text>
-                <Data size={14} weight={500} tone="pass">{`${Math.round(t.probability * 100)}%`}</Data>
-                <Text size={10} tone="dim">{t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}</Text>
-              </div>
-            ))}
-            <div>
-              <Text size={10} tone="dim">STOP HIT</Text>
-              <Data size={14} weight={500} tone="reject">{`${Math.round(mcResult.invalidation.probability * 100)}%`}</Data>
-              <Text size={10} tone="dim">{mcResult.invalidation.expectedDays != null ? `~${Math.round(mcResult.invalidation.expectedDays)}d` : 'unlikely'}</Text>
+        </section>
+        <section className={styles.editSection} aria-labelledby={secTargetsId}>
+          <h3 id={secTargetsId} className={styles.editSectionTitle}>Targets &amp; take-profit</h3>
+          <TargetEditor
+            targets={position.targets}
+            onChange={(targets) => onChange({ targets })}
+          />
+          <TpMethodSelector
+            position={position}
+            mcTargetPrice={mcRungPrice}
+            onChange={onChange}
+          />
+          {/* The RECORD (what was picked) stays on screen together with the SELECTOR
+              (what drives the alert today): the two can legitimately disagree and a
+              trader can only see that if both are visible. */}
+          <PickedMethodRecord position={position} />
+        </section>
+        <section className={styles.editSection} aria-labelledby={secExitId}>
+          <h3 id={secExitId} className={styles.editSectionTitle}>Exit plan &amp; odds</h3>
+          {!position.contract.endsWith('|STOCK') && (
+            <ExitPlanEditor position={position} onChange={onChange} />
+          )}
+          <div className={styles.mcSection}>
+            <Text size={12} weight={500}>Monte Carlo estimate</Text>
+            <div className={styles.mcRow}>
+              <button type="button" className={styles.mcBtn} onClick={runEstimate} disabled={mcLoading || estimateDisabled}>
+                <Text size={12} weight={500}>{mcLoading ? 'Estimating…' : 'Estimate'}</Text>
+              </button>
+              {mcError && <Text size={11} tone="reject">{mcError}</Text>}
             </div>
+            {isStock && !(position.currentPrice > 0) && (
+              <Text size={11} tone="dim">
+                No live current price yet — can&apos;t estimate until a price is available.
+              </Text>
+            )}
+            {!hasStop && <Text size={11} tone="dim">No stop set</Text>}
+            {stopBreached && (
+              <Text size={11} tone="dim">
+                The stop is already on the wrong side of the current price — sync the position&apos;s stop before estimating.
+              </Text>
+            )}
+            {structuralStopBreached && (
+              <Text size={11} tone="dim">
+                The structural level is already on the wrong side of the current price — sync the position&apos;s structural level before estimating.
+              </Text>
+            )}
+            {isStock && position.currentPrice > 0 && !stopBreached && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
+              <Text size={11} tone="dim">
+                Every target has already been reached — add a new target to estimate further upside.
+              </Text>
+            )}
+            {mcResult?.horizonNote && (
+              <Text size={10} tone="dim">Chance of reaching each target within {mcResult.horizonNote}</Text>
+            )}
+            {mcResult && (
+              <div className={styles.mcResultRow}>
+                {mcResult.targets.map((t, i) => (
+                  <div key={`${t.label}-${i}`}>
+                    <Text size={10} tone="dim">{t.label.toUpperCase()}</Text>
+                    <Data size={14} weight={500} tone="pass">{`${Math.round(t.probability * 100)}%`}</Data>
+                    <Text size={10} tone="dim">{t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}</Text>
+                  </div>
+                ))}
+                <div>
+                  <Text size={10} tone="dim">STOP HIT</Text>
+                  <Data size={14} weight={500} tone="reject">{`${Math.round(mcResult.invalidation.probability * 100)}%`}</Data>
+                  <Text size={10} tone="dim">{mcResult.invalidation.expectedDays != null ? `~${Math.round(mcResult.invalidation.expectedDays)}d` : 'unlikely'}</Text>
+                </div>
+              </div>
+            )}
+            {mcResult?.modelCaveat && (
+              <Text size={11} tone="caution">{mcResult.modelCaveat}</Text>
+            )}
+            {mcPriceStale && (
+              <Text size={11} tone="caution">Price has changed since this estimate was computed.</Text>
+            )}
           </div>
-        )}
-        {mcResult?.modelCaveat && (
-          <Text size={11} tone="caution">{mcResult.modelCaveat}</Text>
-        )}
-        {mcPriceStale && (
-          <Text size={11} tone="caution">Price has changed since this estimate was computed.</Text>
-        )}
-      </div>
-
-      <div className={styles.targetEditor}>
-        <Text size={11} tone="secondary">Notes</Text>
-        <SymbolNotes symbol={position.symbol} editable={isHeld || isWatched} />
+        </section>
+        <section className={styles.editSection} aria-labelledby={secAlertsId}>
+          <h3 id={secAlertsId} className={styles.editSectionTitle}>Alerts for this position</h3>
+          <AlertOverridesEditor position={position} onChange={onChange} />
+        </section>
+        <section className={`${styles.editSection} ${styles.editSectionFull}`} aria-labelledby={secPositionId}>
+          <h3 id={secPositionId} className={styles.editSectionTitle}>Position</h3>
+          <div className={styles.addedFill}>
+            <EditField
+              label="Contracts"
+              hint="Number of option contracts held."
+              value={savedQty}
+              // A quantity, not a level: 0 contracts is not "no override", it is a
+              // position that does not exist. Closing one is the row's Close
+              // button, not a 0 typed here.
+              zeroClears={false}
+              draftEpoch={fillErrorAt}
+              // An increase is an added fill. Hold it and ask for the price.
+              // A decrease still commits on blur, as it always has.
+              onCommit={(n) => {
+                const next = Math.max(1, Math.round(n));
+                if (next > savedQty) {
+                  setHeldTotal(next);
+                  setPriceRejected(null);
+                  return false;
+                }
+                setHeldTotal(null);
+                return true;
+              }}
+              onChange={(n) => onChange({ contracts: Math.max(1, Math.round(n)) })}
+            />
+            <Text size={10} tone="dim">{`Average entry $${position.entryPrice.toFixed(2)}`}</Text>
+            {pendingIncrease != null && (
+              <div className={styles.addedFillRow}>
+                <label className={styles.editField}>
+                  <Text size={11} tone="secondary">Added fill price</Text>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className={styles.editInput}
+                    value={fillPrice}
+                    aria-label="Added fill price"
+                    onChange={(e) => { setPriceRejected(null); setFillPrice(e.target.value); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void confirmFill(); } }}
+                  />
+                </label>
+                <button type="button" className={styles.mcBtn} onClick={() => { void confirmFill(); }}>
+                  Confirm added fill
+                </button>
+              </div>
+            )}
+            {priceRejected && <Text size={10} tone="caution">{priceRejected}</Text>}
+            {exposureBreach && <Text size={10} tone="caution">{rejectionMessage(exposureBreach)}</Text>}
+          </div>
+          <details className={styles.manualOverrides}>
+            <summary className={styles.manualOverridesSummary}>Manual overrides</summary>
+            <EditField
+              label="Current price"
+              // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
+              // quote for carries a 0 currentPrice that is not a price. The field
+              // shows it as unknown -- empty, with a placeholder -- exactly as the
+              // table shows "—", never as 0.
+              hint={position.quoteUnavailable
+                ? 'Quote unavailable'
+                : 'Manual override — will refresh from broker in live mode.'}
+              value={position.currentPrice}
+              unknown={position.quoteUnavailable === true}
+              placeholder="— (no quote)"
+              // 0 is refused here (decision Q6): it would write `currentPrice: 0`
+              // and a -100% P&L onto the row. The way to mark a position worthless
+              // is to CLOSE it at $0, which the close path supports end to end.
+              //
+              // How long a typed value survives (P2-14, corrected): it is not sent
+              // to the backend -- `toUpdatePayload` omits currentPrice/pnlDollar/
+              // pnlPct -- but it IS persisted to localStorage (partialize keeps
+              // `positions`), so it survives a reload for as long as syncs fail.
+              // A successful sync's `fromBackend` rewrites all three.
+              zeroClears={false}
+              zeroMessage="Must be greater than 0 — to mark it worthless, close the position at $0 (Close button). Kept the previous value."
+              onChange={(n) => {
+                const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
+                const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
+                const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
+                // A typed price IS a mark: the row is no longer "no quote" until the
+                // next sync says otherwise (fromBackend rewrites the flag). Without
+                // this the override would be written while the field, the table and
+                // the totals all kept showing it as unknown.
+                onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
+                setPriceEditedSinceEstimate(true);
+              }}
+            />
+          </details>
+          <div className={styles.targetEditor}>
+            <Text size={11} tone="secondary">Notes</Text>
+            <SymbolNotes symbol={position.symbol} editable={isHeld || isWatched} />
+          </div>
+        </section>
       </div>
 
       <div className={styles.editFooter}>
@@ -910,10 +931,11 @@ function MaxLossBanner({
   // loss genuinely can't be computed.
   if (!exitPlan || position.contract.endsWith('|STOCK') || position.entryPrice <= 0) return null;
 
-  const lossAtStop = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, debounced.contracts);
+  // Non-null: the guard above is exactly riskAtStopOf's own precondition.
+  const lossAtStop = riskAtStopOf(position, debounced.contracts) ?? 0;
   const limitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, debounced.override);
   const exceeded = lossAtStop > limitDollar;
-  const riskPerContract = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, 1);
+  const riskPerContract = riskAtStopOf(position, 1) ?? 0;
   const sizing = recommendedContractSize(limitDollar, riskPerContract);
 
   const applyOverride = () => {

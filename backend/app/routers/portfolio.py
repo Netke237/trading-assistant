@@ -44,6 +44,13 @@ router = APIRouter(prefix='/api', tags=['trading'])
 import logging as _logging
 _log = _logging.getLogger(__name__)
 
+# The latest GET /api/portfolio that skipped the equity snapshot write because of
+# unquoted rows: (server-local date, de-duplicated unquoted contract ids), or None
+# when the latest outcome was a write or a read with no open positions. Not
+# persisted (no table/column): it is process-local and resets on restart. The
+# backend runs one uvicorn worker, so this one value is the process truth.
+_last_snapshot_skip: tuple[str, list[str]] | None = None
+
 
 # A stock price is never <= 0, so a non-positive stop/structuralStop can only
 # mean "unset" — used at both the creation (POST) and edit (PATCH) boundaries
@@ -85,6 +92,7 @@ def _maybe_send_close_to_broker(closed: ClosedPositionModel, send: bool) -> None
 
 @router.get('/portfolio', response_model=list[PortfolioPositionSchema])
 async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPositionSchema]:
+    global _last_snapshot_skip
     try:
         result = await db.execute(select(PortfolioPositionModel).order_by(PortfolioPositionModel.created_at))
     except (OperationalError, ProgrammingError) as exc:
@@ -99,6 +107,9 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
     schemas = [PortfolioPositionSchema.from_orm_model(p) for p in positions]
 
     if not schemas:
+        # Nothing open, so nothing can be unquoted: a stale skip must not outlive
+        # the positions that caused it.
+        _last_snapshot_skip = None
         return schemas
 
     # Enrich with live option quotes — all positions fetched concurrently. Also fetch a live
@@ -171,10 +182,13 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
     if unquoted:
         _log.info("equity snapshot not written: no quote for %d position(s): %s",
                   len(unquoted), ", ".join(unquoted))
+        _last_snapshot_skip = (today.isoformat(), list(dict.fromkeys(unquoted)))
         return schemas
     open_value = sum(s.currentPrice * _contract_multiplier(s.contract) * s.qty for s in schemas)
     open_pnl = sum(s.pnlDollar or 0.0 for s in schemas)
     await _upsert_equity_snapshot(db, open_value, open_pnl)
+    # Cleared only once the write has returned: a write that raises leaves the record as it was.
+    _last_snapshot_skip = None
     return schemas
 
 
@@ -688,6 +702,7 @@ async def get_performance(db: AsyncSession = Depends(get_db)) -> PerformanceResp
     )).scalars().all()
     equity_curve = [PerformancePoint(date=s.snapshot_date, value=s.total_value) for s in snaps]
     open_pnl_curve = [PerformancePoint(date=s.snapshot_date, value=s.open_pnl) for s in snaps]
+    skip = _last_snapshot_skip
 
     return PerformanceResponse(
         realizedToday=buckets["today"], realizedWeek=buckets["week"],
@@ -695,4 +710,8 @@ async def get_performance(db: AsyncSession = Depends(get_db)) -> PerformanceResp
         realizedCurve=[PerformancePoint(**p) for p in realized_curve],
         equityCurve=equity_curve,
         openPnlCurve=open_pnl_curve,
+        # snaps is ordered ascending by ISO date, so the last row is the newest.
+        lastSnapshotDate=snaps[-1].snapshot_date if snaps else None,
+        snapshotSkippedOn=skip[0] if skip else None,
+        snapshotSkippedContracts=list(skip[1]) if skip else [],
     )

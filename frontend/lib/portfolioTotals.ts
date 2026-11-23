@@ -140,3 +140,38 @@ export function unquotedNote(unquoted: number): string | null {
   if (unquoted <= 0) return null;
   return `Excludes ${unquoted} position${unquoted === 1 ? '' : 's'} without a quote`;
 }
+
+/** One open option's loss if the underlying reaches its exit-plan stop, in
+ *  dollars; null for a stock, a row with no exit plan, or `entryPrice <= 0`
+ *  (a data glitch, not a real 0-loss trade).
+ *
+ *  The single implementation behind `riskAtStopOf` (lib/risk.ts, the editor's
+ *  rule) and `riskAtStopTotal`. It lives HERE, not in risk.ts, because risk.ts
+ *  imports `exposureMark` from this file and a back-import would be a cycle.
+ *  The arithmetic is the same as `maxLossAtStop` (lib/risk.ts); risk.test.ts
+ *  pins their equality. */
+export function riskAtStopDollars(p: PortfolioPosition, contractsOverride?: number): number | null {
+  if (!p.exitPlan || p.contract.endsWith('|STOCK') || !(p.entryPrice > 0)) return null;
+  const contracts = contractsOverride ?? p.contracts ?? 1;
+  return Math.max(0, p.entryPrice - p.exitPlan.stop.contractPrice) * contracts * 100;
+}
+
+export interface RiskAtStopTotal {
+  total: number;
+  /** Positions with a risk figure. */
+  priced: number;
+  /** Positions without one (no exit plan, or a stock). A quote is not needed. */
+  unpriced: number;
+}
+
+export function riskAtStopTotal(positions: PortfolioPosition[]): RiskAtStopTotal {
+  let total = 0;
+  let priced = 0;
+  for (const p of positions) {
+    const r = riskAtStopDollars(p);
+    if (r == null) continue;
+    total += r;
+    priced += 1;
+  }
+  return { total, priced, unpriced: positions.length - priced };
+}
