@@ -10,13 +10,13 @@
     {
       "id": "PORTFOLIO-EDITOR-LAYOUT",
       "name": "Portfolio position editor regrouped into five sections, no field removed (#662)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "tracking_issue": 662,
       "branch": "board/portfolio-editor-layout-c2e7df65",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "plan": "docs/superpowers/plans/2026-11-22-portfolio-editor-layout-plan.md",
       "audit_rounds": 2,
       "audit_clean": true,
@@ -66,7 +66,7 @@
         "pattern": "editSections",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-22 plan written; plan audit round 1 clean (0 gate findings) at a8f09f74. Tickets #691 (T1 f733f9a5), #692 (T2 e3dbe03d) closed. Code audit round 1 clean (0 gate findings) at e3dbe03d. Local: typecheck ok; eslint 0 errors; portfolio suites 12/288 pass. SELF-MERGE PENDING, PR #698, audited head e3dbe03d (PR head a83568f8, CI green; pending is not shipped)."
+      "note": "2026-11-22 plan written; plan audit round 1 clean (0 gate findings) at a8f09f74. Tickets #691 (T1 f733f9a5), #692 (T2 e3dbe03d) closed. Code audit round 1 clean (0 gate findings) at e3dbe03d. Local: typecheck ok; eslint 0 errors; portfolio suites 12/288 pass. SHIPPED 2026-11-23: PR #698 merged at 73853dcca86d97b666ece1d97672409f0c193c41 (head 90eae58b, CI green on the exact head after one flake rerun of TradeCard.methodPick, audit clean at e3dbe03d)."
     },
     {
       "id": "OHLCV-ALPACA-DAY-HOLES",
