@@ -21,6 +21,10 @@
 #     whose own finished cells already ran slower than that. Shares are upper bounds of what the
 #     finished groups measured (11-20 .. 11-22: Swing 0.52, Position 0.31, Quarterly 0.32,
 #     SemiAnnual 0.14, Annual 0.16). A call's length is its cell plus its partner if unfinished.
+#   * Sleep correction (2026-11-25, Kenneth: "Yes, correct it"). runtime_s is wall-clock time, so a
+#     cell computed while the machine slept records the sleep too. $SleepHours (Kernel-Power 1 sleep
+#     and wake times) is subtracted from such a cell for the estimate above only; cell files and
+#     reports keep the recorded figure.
 # Test hook: J1_TEST_CLOCK (a file holding an ISO time) replaces the clock; unset in production.
 param([string]$WindowEnd = "01:30", [string]$WindowStart = "03:30", [int]$Workers = 3, [double]$Margin = 1.3, [double]$GroupPassHours = 1.0,
       [double]$SessionHours = 22.0,
@@ -47,6 +51,11 @@ $GroupHours = @{
     "mean_reversion_rsi|Bearish" = 10.65; "mean_reversion_bb|Bearish" = 15.36; "mean_reversion_multi|Bearish" = 42.56
 }
 $HorizonShare = @{ "Swing" = 0.55; "Position" = 0.35; "Quarterly" = 0.35; "SemiAnnual" = 0.18; "Annual" = 0.18 }
+# Sleep inside a cell's computation, by cell file name: hours to subtract for the estimate only.
+$SleepHours = @{
+    # slept 2026-11-25 09:48:33.9Z .. 17:38:52.1Z (Kernel-Power 1) during the 03:30 call (Swing, then Annual)
+    "mean_reversion_rsi__Bearish__Annual" = 7.8384
+}
 
 function Get-Now {
     if ($env:J1_TEST_CLOCK) { return [datetime]::Parse((Get-Content $env:J1_TEST_CLOCK -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture) }
@@ -76,8 +85,11 @@ function Test-Cell([string]$Item, [string]$Hz) { return (Test-Path (Get-CellFile
 
 function Get-RuntimeHours([string]$File) {
     $hit = Select-String -Path $File -Pattern '"runtime_s":\s*([0-9.eE+-]+)' -List
-    if ($hit) { return [double]$hit.Matches[0].Groups[1].Value / 3600.0 }
-    return 0.0
+    if (-not $hit) { return 0.0 }
+    $h = [double]$hit.Matches[0].Groups[1].Value / 3600.0
+    $slept = $SleepHours[[IO.Path]::GetFileNameWithoutExtension($File)]
+    if ($slept) { $h = [math]::Max(0.0, $h - $slept) }
+    return $h
 }
 
 function Get-Calibration {       # K: the largest measured/probe ratio among finished groups, >= 1.0
