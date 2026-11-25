@@ -106,4 +106,7 @@ const createChart = jest.fn((_container, options) => {
   };
 });
 
-module.exports = { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries };
+// Mirrors lightweight-charts v5's LineType enum values.
+const LineType = { Simple: 0, WithSteps: 1, Curved: 2 };
+
+module.exports = { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries, LineType };

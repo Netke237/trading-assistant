@@ -842,3 +842,21 @@
   width: 5px;
   outline: 2px solid var(--bg-surface);
 }
+
+/* PORTFOLIO-HISTORY-INSIGHTS (#663): trade statistics strip, filter bar, sortable headers. */
+.historyRow { grid-template-columns: 64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 56px; }
+.historyActions { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.historyActions a { text-decoration: none; }
+.removeConfirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.tradeStats { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.tradeStatsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); }
+.tradeStat { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 8px; padding: var(--space-2) var(--space-3); }
+.historyFilterBar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+.filterGroup { display: flex; gap: 4px; }
+.filterBtn, .filterBtnActive { background: none; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.filterBtnActive { background: var(--bg-surface-2); color: var(--text-primary); border-color: var(--accent); }
+.filterSearch { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 4px 8px; font-size: 12px; color: var(--text-primary); width: 120px; }
+.sortBtn { background: none; border: none; padding: 0; margin: 0; font: inherit; font-size: 11px; color: var(--text-dim); cursor: pointer; display: inline-flex; align-items: center; gap: 2px; }
+.sortBtn:hover { color: var(--text-primary); }
+.sortMark { display: inline-block; min-width: 8px; font-size: 9px; }
+.datesHeader { display: flex; gap: var(--space-2); }

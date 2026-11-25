@@ -113,6 +113,7 @@ describe('Portfolio page numbers (PORTFOLIO-NUMBERS T3)', () => {
     expect(titled).not.toBeNull();
     expect(within(titled).getByText('82C · 16 Oct 26')).toBeInTheDocument();
     expect(screen.queryByText('NFLX|82|2026-10-16|C')).not.toBeInTheDocument();
-    expect(screen.getByText('−$564')).toBeInTheDocument();
+    // The trade statistics strip now repeats this figure (average loss, expectancy): scope to the row.
+    expect(within(screen.getByTestId('history-row')).getByText('−$564')).toBeInTheDocument();
   });
 });

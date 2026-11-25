@@ -57,7 +57,8 @@ interface PerfState {
   fetchedAt: number | null;
   fetchHistory: () => Promise<void>;
   fetchPerformance: () => Promise<void>;
-  removeHistory: (id: string) => Promise<void>;
+  /** Resolves true when the row was dropped (2xx/204/404); false when it still exists server-side. */
+  removeHistory: (id: string) => Promise<boolean>;
   clearAllHistory: () => Promise<void>;
 }
 
@@ -92,9 +93,17 @@ export const usePerformanceStore = create<PerfState>((set, get) => ({
   },
   removeHistory: async (id) => {
     try {
-      await fetch(`${BASE()}/api/portfolio/history/${id}`, { method: 'DELETE' });
-      set({ history: get().history.filter((h) => h.id !== id) });
-    } catch { /* backend offline */ }
+      const res = await fetch(`${BASE()}/api/portfolio/history/${id}`, { method: 'DELETE' });
+      // 404: already gone server-side, so dropping it locally is correct. Anything
+      // else (500…) means it still counts server-side: keep the row on screen.
+      if (res.ok || res.status === 204 || res.status === 404) {
+        set({ history: get().history.filter((h) => h.id !== id) });
+        return true;
+      }
+      return false;
+    } catch {
+      return false; /* backend offline */
+    }
   },
   clearAllHistory: async () => {
     try {

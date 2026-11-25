@@ -15,6 +15,7 @@ import {
   createChart,
   LineSeries,
   LineStyle,
+  LineType,
   type IChartApi,
   type ISeriesApi,
   type Time,
@@ -175,6 +176,9 @@ export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 26
     if (!line || !chart || chartVersion === 0) return;
     const points: Array<{ time: Time; value?: number }> = data.map((p) => ({ time: p.date as Time, value: p.value }));
     if (notice) points.push({ time: notice.referenceDay as Time });
+    // Realized P&L only changes on a close date: draw it as steps so the curve
+    // holds flat until the next close. Always set, so switching kind restores a plain line.
+    line.applyOptions({ lineType: kind === 'realized' ? LineType.WithSteps : LineType.Simple });
     line.setData(points as Parameters<typeof line.setData>[0]);
 
     let dash: ISeriesApi<'Line'> | null = null;
@@ -204,7 +208,7 @@ export function PnlChart({ equityCurve, realizedCurve, openPnlCurve, height = 26
       if (dash && chartRef.current === chart) chart.removeSeries(dash);
       if (dashRef.current === dash) dashRef.current = null;
     };
-  }, [data, chartVersion, notice, recomputeGap]);
+  }, [data, kind, chartVersion, notice, recomputeGap]);
 
   const empty = data.length === 0;
 
