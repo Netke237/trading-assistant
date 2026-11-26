@@ -53,8 +53,8 @@ back-filling old rows (old rows stay NULL — never guessed).
 | `exit_reason` String(20) | `exitReason` | one of `stop`, `structural_stop`, `premium_stop`, `target`, `time_stop`, `expiry`, `manual`, `unknown`; NULL when the request omits it |
 | `stop_at_close` Float | `stopAtClose` | locked `position.stop` (already floored; NULL stays NULL) |
 | `structural_stop_at_close` Float | `structuralStopAtClose` | locked `position.structural_stop` |
-| `premium_stop_pct_at_close` Float | `premiumStopPctAtClose` | **option rows only**: `resolve_premium_stop_pct(position.premium_stop_pct, _global_premium_stop_pct())`, **except** NULL when the position inherits (`premium_stop_pct is None`) and the global could not be loaded (`None`) — the 0.60 last-resort fallback is a guess and is never persisted. Stock rows (`contract` ends `\|STOCK`): NULL (no premium stop applies). |
-| `premium_stop_price_at_close` Float | `premiumStopPriceAtClose` | option rows with a stored pct: `premium_stop_threshold_price(position.entry_price, pct)` (per-share option price at which the stop fires); otherwise NULL |
+| `premium_stop_pct_at_close` Float | `premiumStopPctAtClose` | **every row (options and stocks)** — the percent stop applies to stocks too (`alert_generator.py:312-336` fires `PREMIUM_STOP` for `\|STOCK` positions; the frontend labels it "Stock stop"): `resolve_premium_stop_pct(position.premium_stop_pct, _global_premium_stop_pct())`, **except** NULL when the position inherits (`premium_stop_pct is None`) and the global could not be loaded (`None`) — the 0.60 last-resort fallback is a guess and is never persisted. |
+| `premium_stop_price_at_close` Float | `premiumStopPriceAtClose` | rows with a stored pct and `entry_price > 0`: `percent_stop_threshold_price(position.entry_price, pct, is_short_stock_position(position.contract, position.direction))` (both in `services/premium_stop.py`) — the same call the alert generator uses: option and long stock `entry×(1−pct)`, short stock `entry×(1+pct)`; otherwise NULL |
 
 Partial closes: each close row carries its own snapshot taken from the locked position at that close.
 No other table changes. `record_realized_loss`, P&L math and the position reduce/delete are untouched.
@@ -125,7 +125,8 @@ T1:
   `stop`/`structural_stop` copied, `exitReason` stored.
 - Close an option inheriting the global (monkeypatch `_global_premium_stop_pct` → 0.5) → pct 0.5.
 - Inheriting with global `None` → pct and price NULL (never 0.60).
-- Stock close → premium fields NULL, stops copied.
+- Long-stock close → pct stored, price = entry×(1−pct), stops copied.
+- Short-stock (Bearish `|STOCK`) close → pct stored, price = entry×(1+pct).
 - Partial close then full close of the same position → two rows, each with its own snapshot (change
   the position's stop between the two closes; each row holds the value at its close).
 - Omitted `exitReason` → NULL; invalid value → 422 and **no** row written, position unchanged.
