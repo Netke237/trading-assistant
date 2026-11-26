@@ -53,6 +53,18 @@ def _create_history_state(db):
         "'2026-10-14 01:00:00','2020-10-12','tiingo','abc123')")
 
 
+def _create_closed_positions(db):
+    # The pre-e3c7a1f5b209 shape of closed_positions: every real database has
+    # this table, and `upgrade head` adds the exit-record columns to it.
+    db.execute(
+        "CREATE TABLE closed_positions ("
+        " id VARCHAR(36) NOT NULL PRIMARY KEY, rec_id VARCHAR NOT NULL, symbol VARCHAR NOT NULL,"
+        " contract VARCHAR NOT NULL, direction VARCHAR NOT NULL, entry_price FLOAT NOT NULL,"
+        " entry_date VARCHAR, exit_price FLOAT NOT NULL, exit_date VARCHAR NOT NULL,"
+        " qty_closed INTEGER NOT NULL, realized_pnl_dollar FLOAT NOT NULL,"
+        " realized_pnl_pct FLOAT NOT NULL, source VARCHAR, closed_at DATETIME)")
+
+
 OLD_ROW = ("TEST", "2016-01-01", "2016-01-04", "tiingo", "2026-10-14 01:00:00",
            "2020-10-12", "tiingo", "abc123")
 OLD_COLUMNS = ["symbol", "floor_requested_start", "floor_date", "floor_provider",
@@ -104,6 +116,7 @@ def test_upgrade_from_main_head_adds_basis_columns(tmp_path):
     path = tmp_path / "from_main_head.db"
     with sqlite3.connect(path) as db:
         _create_history_state(db)
+        _create_closed_positions(db)
     alembic = _alembic_runner(path)
     alembic("stamp", MAIN_HEAD)
     alembic("upgrade", "head")

@@ -486,8 +486,12 @@ def test_ingestion_run_revision_stacks_on_the_single_prior_head(tmp_path):
     config.set_main_option("script_location", str(backend / "migrations"))
     script = ScriptDirectory.from_config(config)
     assert script.get_revision(NEW_REVISION).down_revision == PRIOR_HEAD
+    # Later revisions stack on top, so the head itself is not pinned: exactly
+    # one head, and this revision is it or one of its ancestors.
     heads = script.get_heads()
-    assert heads == [NEW_REVISION]
+    assert len(heads) == 1, heads
+    ancestors = {rev.revision for rev in script.iterate_revisions(heads[0], "base")}
+    assert NEW_REVISION in ancestors
     out = _alembic_runner(tmp_path / "heads.db")("heads").stdout
     assert [line.split()[0] for line in out.splitlines() if line.strip()] == heads
 
