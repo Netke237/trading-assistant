@@ -17,6 +17,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
 import { BrokerAttemptPanel } from '@/components/organisms/BrokerAttemptPanel';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
+import type { ExitReason } from '@/lib/exitReason';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
@@ -313,7 +314,7 @@ export default function PortfolioPage() {
     tabRefs.current[next]?.focus();
   };
 
-  const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
+  const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string; exitReason: ExitReason }) => {
     setCloseError(null);
     const { ok, detail } = await closeRemote(p.recId, opts);
     if (ok) {
@@ -825,6 +826,7 @@ export default function PortfolioPage() {
               {closeError && <Text size={12} tone="reject">{closeError}</Text>}
               <ClosePositionDrawer
                 position={p}
+                premiumStopPct={premiumStopPct}
                 onCancel={dismiss}
                 onConfirm={(opts) => confirmClose(p, opts)}
               />

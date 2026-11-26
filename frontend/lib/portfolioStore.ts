@@ -15,6 +15,7 @@ import { validationMessages } from '@/lib/pydanticError';
 import { premiumStopDropReason, premiumStopIsSubCent, type PremiumStopDropReason } from '@/lib/premiumStop';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import { savedDifferences, type PreviewDifference, type TrackingPreview } from '@/lib/trackingReview';
+import type { ExitReason } from '@/lib/exitReason';
 
 type BackendPosition = {
   id: string;
@@ -282,7 +283,7 @@ interface PortfolioStoreState {
   closePosition:  (contract: string) => void;
   closePositionRemote: (
     recId: string,
-    opts: { qtyToClose?: number | null; exitPrice?: number | null; exitDate?: string | null; sendToBroker?: boolean },
+    opts: { qtyToClose?: number | null; exitPrice?: number | null; exitDate?: string | null; sendToBroker?: boolean; exitReason?: ExitReason | null },
   ) => Promise<{ ok: boolean; detail?: string }>;
   /** Returns whether the pull actually reached the backend and updated state
    *  (false on network failure — callers that just mutated local state around
@@ -1651,6 +1652,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                 exitPrice: opts.exitPrice ?? null,
                 exitDate: opts.exitDate ?? null,
                 sendToBroker: opts.sendToBroker ?? false,
+                exitReason: opts.exitReason ?? null,
               }),
             });
           const local = usePortfolioStore.getState().positions.find((p) => p.recId === recId);

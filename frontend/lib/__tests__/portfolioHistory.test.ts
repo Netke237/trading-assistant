@@ -77,11 +77,40 @@ describe('toHistoryCsv', () => {
               exitDate: '2026-06-01', entryDate: '2026-05-01', direction: 'Bull, ish' }),
     ]);
     const lines = csv.split('\n');
-    expect(lines[0]).toBe('Exit Date,Entry Date,Symbol,Contract,Direction,Qty,Entry,Exit,P&L $,P&L %');
-    expect(lines[1]).toBe('2026-06-01,2026-05-01,AAPL,AAPL|185|2026-06-19|C,"Bull, ish",2,1.50,2.25,150.00,50.00');
+    expect(lines[0]).toBe('Exit Date,Entry Date,Symbol,Contract,Direction,Qty,Entry,Exit,P&L $,P&L %,Exit Reason,Stop at Close,Structural Stop at Close,Premium Stop % at Close,Premium Stop Price at Close');
+    expect(lines[1]).toBe('2026-06-01,2026-05-01,AAPL,AAPL|185|2026-06-19|C,"Bull, ish",2,1.50,2.25,150.00,50.00,,,,,');
   });
 
   it('returns just the header for empty history', () => {
-    expect(toHistoryCsv([])).toBe('Exit Date,Entry Date,Symbol,Contract,Direction,Qty,Entry,Exit,P&L $,P&L %');
+    expect(toHistoryCsv([])).toBe('Exit Date,Entry Date,Symbol,Contract,Direction,Qty,Entry,Exit,P&L $,P&L %,Exit Reason,Stop at Close,Structural Stop at Close,Premium Stop % at Close,Premium Stop Price at Close');
+  });
+});
+
+describe('toHistoryCsv exit record columns (PORTFOLIO-EXIT-RECORD)', () => {
+  const BASE = 'Exit Date,Entry Date,Symbol,Contract,Direction,Qty,Entry,Exit,P&L $,P&L %';
+  const EXTRA = 'Exit Reason,Stop at Close,Structural Stop at Close,Premium Stop % at Close,Premium Stop Price at Close';
+
+  it('appends the five columns after P&L % and keeps earlier columns unchanged', () => {
+    const csv = toHistoryCsv([
+      trade({ symbol: 'AAPL', contract: 'AAPL|185|2026-06-19|C', qtyClosed: 2,
+              entryPrice: 1.5, exitPrice: 2.25, realizedPnlDollar: 150, realizedPnlPct: 50,
+              exitDate: '2026-06-01', entryDate: '2026-05-01', direction: 'Bullish',
+              exitReason: 'structural_stop', stopAtClose: 180, structuralStopAtClose: 182.5,
+              premiumStopPctAtClose: 0.4, premiumStopPriceAtClose: 0.9 }),
+    ]);
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe(`${BASE},${EXTRA}`);
+    expect(lines[1]).toBe('2026-06-01,2026-05-01,AAPL,AAPL|185|2026-06-19|C,Bullish,2,1.50,2.25,150.00,50.00,Structural stop,180,182.5,40.00,0.90');
+  });
+
+  it('writes empty cells for null/absent fields, including a missing reason', () => {
+    const csv = toHistoryCsv([
+      trade({ exitReason: null, stopAtClose: null, structuralStopAtClose: null,
+              premiumStopPctAtClose: null, premiumStopPriceAtClose: null }),
+      trade({}),
+    ]);
+    const lines = csv.split('\n');
+    expect(lines[1].endsWith(',100.00,,,,,')).toBe(true);
+    expect(lines[2].endsWith(',100.00,,,,,')).toBe(true);
   });
 });

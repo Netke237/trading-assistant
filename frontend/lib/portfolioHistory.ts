@@ -2,6 +2,7 @@
 // Pure transforms over closed-trade history: ISO-week aggregation + CSV export.
 // No React, no DOM — unit-tested in lib/__tests__/portfolioHistory.test.ts.
 import type { ClosedPosition } from './performanceStore';
+import { exitReasonLabel } from './exitReason';
 
 export interface WeekAgg {
   isoWeek: number;                  // 1..53
@@ -106,9 +107,15 @@ export function tradeYears(history: ClosedPosition[]): number[] {
   return Array.from(years).sort((a, b) => a - b);
 }
 
-/** CSV text of all closed trades (header + one row per trade). */
+/** CSV text of all closed trades (header + one row per trade). The exit-record
+ *  columns (PORTFOLIO-EXIT-RECORD) come after 'P&L %' so the earlier columns keep
+ *  their positions; a null/absent value is an empty cell. */
 export function toHistoryCsv(history: ClosedPosition[]): string {
-  const header = ['Exit Date', 'Entry Date', 'Symbol', 'Contract', 'Direction', 'Qty', 'Entry', 'Exit', 'P&L $', 'P&L %'];
+  const header = [
+    'Exit Date', 'Entry Date', 'Symbol', 'Contract', 'Direction', 'Qty', 'Entry', 'Exit', 'P&L $', 'P&L %',
+    'Exit Reason', 'Stop at Close', 'Structural Stop at Close', 'Premium Stop % at Close', 'Premium Stop Price at Close',
+  ];
+  const num = (v: number | null | undefined, fmt: (n: number) => string) => (v == null ? '' : fmt(v));
   const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   const rows = history.map((h) => [
     h.exitDate ?? '',
@@ -121,6 +128,11 @@ export function toHistoryCsv(history: ClosedPosition[]): string {
     h.exitPrice.toFixed(2),
     h.realizedPnlDollar.toFixed(2),
     h.realizedPnlPct.toFixed(2),
+    h.exitReason == null ? '' : exitReasonLabel(h.exitReason),
+    num(h.stopAtClose, String),
+    num(h.structuralStopAtClose, String),
+    num(h.premiumStopPctAtClose, (n) => (n * 100).toFixed(2)),
+    num(h.premiumStopPriceAtClose, (n) => n.toFixed(2)),
   ]);
   return [header, ...rows].map((r) => r.map(esc).join(',')).join('\n');
 }

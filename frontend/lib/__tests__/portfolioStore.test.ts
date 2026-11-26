@@ -358,6 +358,33 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
     });
 
+    it('sends exitReason in the close request body, null when omitted (PORTFOLIO-EXIT-RECORD)', async () => {
+      const bodies: Record<string, unknown>[] = [];
+      global.fetch = jest.fn((url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (url.includes('/close') && method === 'POST') {
+          bodies.push(JSON.parse(String(init?.body)));
+          return Promise.resolve(jsonResponse({ id: 'x' }, true, 201));
+        }
+        if (url.endsWith('/api/portfolio') && method === 'GET') {
+          return Promise.resolve(jsonResponse([], true, 200));
+        }
+        return Promise.resolve(jsonResponse({}, false, 500));
+      }) as unknown as typeof fetch;
+
+      act(() => { usePortfolioStore.setState({ positions: [makePosition({ recId: 'REC-R1', contracts: 1 })] }); });
+      await usePortfolioStore.getState().closePositionRemote(
+        'REC-R1', { qtyToClose: null, exitPrice: 5, exitDate: '2026-07-15', exitReason: 'premium_stop' },
+      );
+      act(() => { usePortfolioStore.setState({ positions: [makePosition({ recId: 'REC-R2', contracts: 1 })] }); });
+      await usePortfolioStore.getState().closePositionRemote(
+        'REC-R2', { qtyToClose: null, exitPrice: 5, exitDate: '2026-07-15' },
+      );
+
+      expect(bodies[0]).toMatchObject({ exitReason: 'premium_stop', exitPrice: 5, exitDate: '2026-07-15' });
+      expect(bodies[1]).toHaveProperty('exitReason', null);
+    });
+
     it('drops a genuinely-gone position and reports why, without touching other positions', async () => {
       const gone = makePosition({ recId: 'REC-GONE', contract: 'GONE|1|2026-01-01|C', contracts: 1 });
       const other = makePosition({ recId: 'REC-OTHER', symbol: 'MSFT', contract: 'MSFT|1|2026-01-01|C', contracts: 1 });

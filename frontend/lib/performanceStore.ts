@@ -1,5 +1,6 @@
 // frontend/lib/performanceStore.ts
 import { create } from 'zustand';
+import type { ExitReason } from './exitReason';
 
 export interface ClosedPosition {
   id: string;
@@ -15,6 +16,14 @@ export interface ClosedPosition {
   realizedPnlDollar: number;
   realizedPnlPct: number;
   closedAt: string;
+  // PORTFOLIO-EXIT-RECORD: why it closed and the stop in force at that close.
+  // Null on rows closed before the snapshot existed (or with no reason sent).
+  exitReason?: ExitReason | null;
+  stopAtClose?: number | null;
+  structuralStopAtClose?: number | null;
+  /** Fraction (0.6 = 60%), as stored. */
+  premiumStopPctAtClose?: number | null;
+  premiumStopPriceAtClose?: number | null;
 }
 
 export interface PerfPoint { date: string; value: number }

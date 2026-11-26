@@ -32,7 +32,7 @@ describe('ClosePositionDrawer realized P&L', () => {
     const position = makePosition({
       contract: 'AAPL|STOCK', direction: 'Bullish', entryPrice: 100, currentPrice: 110, contracts: 10,
     });
-    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     // (110 - 100) * 1 (stock multiplier) * 10 shares = +$100, +10%
     expect(screen.getByText(/\+\$100\b/)).toBeInTheDocument();
     expect(screen.getByText(/\+10\.0%/)).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe('ClosePositionDrawer realized P&L', () => {
     const position = makePosition({
       contract: 'TSLA|STOCK', direction: 'Bearish', entryPrice: 100, currentPrice: 90, contracts: 5,
     });
-    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     // Covering a short at a lower price is a profit: (100 - 90) * 1 * 5 = +$50, +10%
     expect(screen.getByText(/\+\$50\b/)).toBeInTheDocument();
     expect(screen.getByText(/\+10\.0%/)).toBeInTheDocument();
@@ -52,7 +52,7 @@ describe('ClosePositionDrawer realized P&L', () => {
     const position = makePosition({
       contract: 'TSLA|STOCK', direction: 'Bearish', entryPrice: 100, currentPrice: 110, contracts: 5,
     });
-    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     // (100 - 110) * 1 * 5 = -$50, -10%. Rendered with a Unicode minus before
     // the "$" (PORTFOLIO-NUMBERS T3): "−$50", "−10.0%".
     expect(screen.getByText(/−\$50\b/)).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe('ClosePositionDrawer realized P&L', () => {
     const position = makePosition({
       contract: 'AAPL 185C 05/16', direction: 'Bullish', entryPrice: 2, currentPrice: 3, contracts: 2,
     });
-    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     // (3 - 2) * 100 * 2 contracts = +$200, +50%
     expect(screen.getByText(/\+\$200\b/)).toBeInTheDocument();
     expect(screen.getByText(/\+50\.0%/)).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe('ClosePositionDrawer realized P&L', () => {
     const position = makePosition({
       contract: 'AAPL 185P 05/16', direction: 'Bearish', entryPrice: 2, currentPrice: 1, contracts: 2,
     });
-    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     // A long put is still a BUY-to-open position, not a short — closing it is a plain
     // sell-to-close, so P&L follows the long formula regardless of the Bearish direction
     // tag: (1 - 2) * 100 * 2 = -$200, -50%. Rendered as "−$200" (Unicode minus).
@@ -85,7 +85,7 @@ describe('ClosePositionDrawer realized P&L', () => {
 describe('ClosePositionDrawer title (PORTFOLIO-NUMBERS T3)', () => {
   it('shows a readable option contract and keeps the raw key as the title', () => {
     const position = makePosition({ contract: 'AAPL|185|2027-01-15|C', entryPrice: 2, currentPrice: 3 });
-    const { container } = render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    const { container } = render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     const titled = container.querySelector('[title="AAPL|185|2027-01-15|C"]') as HTMLElement;
     expect(titled).not.toBeNull();
     expect(titled).toHaveTextContent('Close AAPL 185C · 15 Jan 27');
@@ -94,7 +94,7 @@ describe('ClosePositionDrawer title (PORTFOLIO-NUMBERS T3)', () => {
 
   it('shows "Stock" for a stock row, the raw key as the title', () => {
     const position = makePosition({ contract: 'AAPL|STOCK' });
-    const { container } = render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    const { container } = render(<ClosePositionDrawer position={position} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
     expect(screen.getByText('Close AAPL Stock')).toBeInTheDocument();
     expect(container.querySelector('[title="AAPL|STOCK"]')).not.toBeNull();
   });
@@ -108,10 +108,10 @@ describe('ClosePositionDrawer — the row changes size under an open dialog', ()
 
   it('clamps the quantity to the new size and sends it on the next confirm', () => {
     const onConfirm = jest.fn();
-    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    const { rerender } = render(<ClosePositionDrawer position={big} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     expect(screen.getByText(/\+\$1,000\b/)).toBeInTheDocument();
 
-    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     expect(screen.getByText(/of 33/)).toBeInTheDocument();
     expect(screen.getByText(/\+\$330\b/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /close position/i }));
@@ -120,9 +120,9 @@ describe('ClosePositionDrawer — the row changes size under an open dialog', ()
 
   it('caps a typed partial size at the new, smaller held size', () => {
     const onConfirm = jest.fn();
-    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    const { rerender } = render(<ClosePositionDrawer position={big} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     fireEvent.change(screen.getByLabelText(/contracts to sell/i), { target: { value: '50' } });
-    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     expect(screen.getByLabelText(/contracts to sell/i)).toHaveValue(33);
     fireEvent.click(screen.getByRole('button', { name: /close position/i }));
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 33 }));
@@ -130,8 +130,8 @@ describe('ClosePositionDrawer — the row changes size under an open dialog', ()
 
   it('keeps a full close full when the row grows', () => {
     const onConfirm = jest.fn();
-    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
-    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} onCancel={noop} onConfirm={onConfirm} />);
+    const { rerender } = render(<ClosePositionDrawer position={big} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     expect(screen.getByText(/of 150/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /close position/i }));
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 150 }));
@@ -139,12 +139,54 @@ describe('ClosePositionDrawer — the row changes size under an open dialog', ()
 
   it('keeps a smaller partial size, and never raises it when the row grows', () => {
     const onConfirm = jest.fn();
-    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    const { rerender } = render(<ClosePositionDrawer position={big} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     fireEvent.change(screen.getByLabelText(/contracts to sell/i), { target: { value: '20' } });
 
-    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
-    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
     fireEvent.click(screen.getByRole('button', { name: /sell 20 of 150/i }));
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 20 }));
+  });
+});
+
+describe('ClosePositionDrawer exit reason (PORTFOLIO-EXIT-RECORD)', () => {
+  const optionPos = (over: Partial<PortfolioPosition> = {}) => makePosition({
+    contract: 'AAA|100|2099-01-15|C', direction: 'Bullish', entryPrice: 5, currentPrice: 5,
+    currentStockPrice: 100, dteRemaining: 40, stop: 90, targets: [{ stockPrice: 120 } as never],
+    ...over,
+  });
+
+  it('renders a required Reason select with all 8 labels, pre-selected from the default', () => {
+    render(<ClosePositionDrawer position={optionPos({ currentStockPrice: 89 })} premiumStopPct={0.6} onCancel={noop} onConfirm={noop} />);
+    const select = screen.getByLabelText('Exit reason') as HTMLSelectElement;
+    expect(select).toBeRequired();
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      'Stop', 'Structural stop', 'Premium stop', 'Target', 'Time stop', 'Expiry', 'Manual', 'Unknown',
+    ]);
+    expect(select.value).toBe('stop');
+  });
+
+  it('defaults to manual when nothing triggered and sends it in onConfirm', () => {
+    const onConfirm = jest.fn();
+    render(<ClosePositionDrawer position={optionPos()} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
+    expect((screen.getByLabelText('Exit reason') as HTMLSelectElement).value).toBe('manual');
+    fireEvent.click(screen.getByRole('button', { name: /Close position/ }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ exitReason: 'manual' }));
+  });
+
+  it('sends the edited value in onConfirm', () => {
+    const onConfirm = jest.fn();
+    render(<ClosePositionDrawer position={optionPos({ currentStockPrice: 89 })} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
+    fireEvent.change(screen.getByLabelText('Exit reason'), { target: { value: 'target' } });
+    fireEvent.click(screen.getByRole('button', { name: /Close position/ }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ exitReason: 'target' }));
+  });
+
+  it('computes the default once on open: a later row change does not overwrite it', () => {
+    const onConfirm = jest.fn();
+    const p = optionPos();
+    const { rerender } = render(<ClosePositionDrawer position={p} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...p, currentStockPrice: 89 }} premiumStopPct={0.6} onCancel={noop} onConfirm={onConfirm} />);
+    expect((screen.getByLabelText('Exit reason') as HTMLSelectElement).value).toBe('manual');
   });
 });
