@@ -25,6 +25,13 @@
 #     cell computed while the machine slept records the sleep too. $SleepHours (Kernel-Power 1 sleep
 #     and wake times) is subtracted from such a cell for the estimate above only; cell files and
 #     reports keep the recorded figure.
+#   * Over-long calls (2026-11-26, Kenneth: "agree with all"). A call longer than a whole session
+#     ($SessionHours; in practice mean_reversion_multi) can never fit before the window end. When no
+#     other call fits, the session starts the first such call anyway and lets it run through the
+#     window end and the 02:00 ingestion (below-normal priority, 3 workers, one core left free),
+#     but only once no unfinished call that fits a session is left. Every other call keeps the
+#     window rule. After such a call the window end is the next one
+#     after "now", and nothing starts between the window end and the window start (ingestion slot).
 # Test hook: J1_TEST_CLOCK (a file holding an ISO time) replaces the clock; unset in production.
 param([string]$WindowEnd = "01:30", [string]$WindowStart = "03:30", [int]$Workers = 3, [double]$Margin = 1.3, [double]$GroupPassHours = 1.0,
       [double]$SessionHours = 22.0,
@@ -139,6 +146,17 @@ function Invoke-Tuner([string]$Cells, [string]$Direction, [string]$Run) {
 while ($true) {
     if (Test-Path "$Root\STOP") { Add-Content -Path $Log "STOP file present: stopping between cells"; exit 0 }
     $now = Get-Now
+    # Only an over-long call can carry the session past its window end; then the window end is the
+    # next one after now, and nothing starts inside the ingestion slot.
+    $quietFrom = $now.Date.Add([timespan]::Parse($WindowEnd)); $quietTo = $now.Date.Add([timespan]::Parse($WindowStart))
+    if ($now -ge $quietFrom -and $now -lt $quietTo) {
+        Add-Content -Path $Log ("{0:yyyy-MM-dd HH:mm} is between {1} and {2} (ingestion slot): stopping between cells" -f $now, $WindowEnd, $WindowStart)
+        exit 0
+    }
+    if ($now -ge $windowEndAt) {
+        $windowEndAt = $now.Date.Add([timespan]::Parse($WindowEnd))
+        if ($windowEndAt -le $now) { $windowEndAt = $windowEndAt.AddDays(1) }
+    }
 
     # 1. Group report for a group whose five cells are finished, in whatever order they finished.
     $passed = $false
@@ -179,6 +197,23 @@ while ($true) {
         if ($null -ne $pick) { break }
     }
     if ($null -eq $first) { Add-Content -Path $Log "all groups finished"; exit 0 }
+    # An over-long call only when every unfinished call is over-long: a call that fits a session
+    # waits for one rather than being pushed back by days (stub test 2026-11-26).
+    $shortLeft = $false
+    if ($null -eq $pick -and $never.Count -gt 0) {
+        foreach ($item in $Queue) {
+            if (Test-Path "$(Get-RunDir $item)\GROUP_DONE") { continue }
+            $f = Get-GroupFactor $item $k
+            foreach ($hz in $Horizons) {
+                if (-not (Test-Cell $item $hz) -and (Get-Call $item $hz $f).Need -le $SessionHours) { $shortLeft = $true }
+            }
+        }
+    }
+    if ($null -eq $pick -and $never.Count -gt 0 -and -not $shortLeft) {
+        $pick = $never[0]
+        Add-Content -Path $Log ("{0:HH:mm} no other cell fits (K {1:N2}); {2} {3} {4} (+ {5}) needs up to {6:N1} h, longer than a whole {7:N0} h session: starting it anyway, it runs past the window end {8:yyyy-MM-dd HH:mm} and through the ingestion" -f $now, $k, $pick.Strategy, $pick.Direction, $pick.Hz, $pick.Partner, $pick.Need, $SessionHours, $windowEndAt)
+        $first = $pick           # no "filling the gap" line below
+    }
     if ($null -eq $pick) {
         Add-Content -Path $Log ("no unfinished cell fits (K {0:N2}): next in order {1} {2} {3} (+ {4}) needs up to {5:N1} h, window ends {6:yyyy-MM-dd HH:mm}: stopping between cells" -f $k, $first.Strategy, $first.Direction, $first.Hz, $first.Partner, $first.Need, $windowEndAt)
         foreach ($c in $never) {
