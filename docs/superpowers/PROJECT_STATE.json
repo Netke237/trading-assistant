@@ -11780,7 +11780,7 @@
       "complexity": 4,
       "completion_pct": 10,
       "plan": "docs/superpowers/plans/2026-11-26-portfolio-exit-record-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": false,
       "verify": {
@@ -11789,7 +11789,13 @@
         "pattern": "exit_reason = Column",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-26 taken by board worker; plan drafted, plan audit pending."
+      "note": "2026-11-26 taken by board worker; plan drafted at 777f78a6. Plan round 1 (fresh gate-auditor a02c371e13ae34c42): 1 gate finding - stocks also have a percent (premium) stop, plan stored NULL for stock rows; fixed at 379fd002 (snapshot pct for all rows, price via percent_stop_threshold_price with short-stock side). Plan round 2 pending.",
+      "plan_stage": {
+        "rounds": 1,
+        "clean": false,
+        "reviewer": "fresh gate-auditor a02c371e13ae34c42 (round 1)",
+        "reviewed": "plan @777f78a6"
+      }
     }
   ],
   "already_shipped": [
