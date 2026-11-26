@@ -2,11 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/portfolio-history-insights-9e3de20c",
-      "claimed_at": "2026-11-25T21:02:14Z",
-      "expires_at": "2026-11-26T00:09:20Z",
-      "note": "board 663 resume",
-      "task": "PORTFOLIO-HISTORY-INSIGHTS"
+      "branch": "claude/recal-options-state-correction",
+      "claimed_at": "2026-11-26T21:22:27Z",
+      "expires_at": "2026-11-27T00:22:27Z",
+      "note": "Correct #187 PROJECT_STATE entry: values never re-derived (Kenneth approved 2026-11-26 via #115 session)",
+      "task": "SEARCH-PROFILES-RECAL-OPTIONS"
     }
   ]
 }
