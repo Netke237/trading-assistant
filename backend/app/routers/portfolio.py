@@ -35,8 +35,12 @@ from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.position_writer import (
     PositionPreview, ReviewRequired, create_position, preview_position, _rescale_rung_shares,
+    _global_premium_stop_pct,
 )
-from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
+from app.services.premium_stop import (
+    is_short_stock_position, percent_stop_threshold_price, premium_stop_is_sub_cent,
+    resolve_premium_stop_pct,
+)
 from app.models.audit_event import AuditEventModel
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -609,6 +613,23 @@ async def close_position(
     if is_short_stock_position(position.contract, position.direction):
         dollar, pct = -dollar, -pct
 
+    # PORTFOLIO-EXIT-RECORD: the stop in force at THIS close, read from the
+    # locked re-read `position` (never the pre-lock `preview`). The percent stop
+    # applies to every row, options and stocks. An inheriting position with no
+    # loadable global stores NULL: the 0.60 last-resort fallback is a guess and
+    # is never persisted.
+    global_stop_pct = _global_premium_stop_pct()
+    if position.premium_stop_pct is None and global_stop_pct is None:
+        stop_pct_at_close = None
+    else:
+        stop_pct_at_close = resolve_premium_stop_pct(position.premium_stop_pct, global_stop_pct)
+    stop_price_at_close = None
+    if stop_pct_at_close is not None and position.entry_price and position.entry_price > 0:
+        stop_price_at_close = percent_stop_threshold_price(
+            position.entry_price, stop_pct_at_close,
+            is_short_stock_position(position.contract, position.direction),
+        )
+
     closed = ClosedPositionModel(
         id=uuid.uuid4().hex,
         rec_id=position.rec_id,
@@ -623,6 +644,11 @@ async def close_position(
         realized_pnl_dollar=dollar,
         realized_pnl_pct=pct,
         source=getattr(position, "source", None),
+        exit_reason=body.exitReason,
+        stop_at_close=position.stop,
+        structural_stop_at_close=position.structural_stop,
+        premium_stop_pct_at_close=stop_pct_at_close,
+        premium_stop_price_at_close=stop_price_at_close,
     )
     db.add(closed)
     await db.flush()

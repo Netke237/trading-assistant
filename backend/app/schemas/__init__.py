@@ -1546,6 +1546,12 @@ class PositionPreviewSchema(BaseModel):
     differences: list[PositionPreviewDifference] = []
 
 
+CloseExitReason = Literal[
+    'stop', 'structural_stop', 'premium_stop', 'target',
+    'time_stop', 'expiry', 'manual', 'unknown',
+]
+
+
 class ClosePositionRequest(BaseModel):
     """Body for POST /api/portfolio/{rec_id}/close."""
     # allow_inf_nan=False (NUMERIC-API-INPUTS T2): exitPrice is persisted.
@@ -1555,6 +1561,9 @@ class ClosePositionRequest(BaseModel):
     exitDate: Optional[str] = None          # None -> today (YYYY-MM-DD)
     # Reserved for the future broker feature (see router stub) — inactive for now.
     sendToBroker: bool = False
+    # PORTFOLIO-EXIT-RECORD: why the trade was closed. Omitted / null -> stored
+    # NULL ("not recorded"); any other value -> 422.
+    exitReason: Optional[CloseExitReason] = None
 
 
 class ClosedPositionSchema(BaseModel):
@@ -1572,6 +1581,12 @@ class ClosedPositionSchema(BaseModel):
     realizedPnlDollar: float
     realizedPnlPct: float
     closedAt: str
+    # PORTFOLIO-EXIT-RECORD snapshot; None on rows closed before it existed.
+    exitReason: Optional[str] = None
+    stopAtClose: Optional[float] = None
+    structuralStopAtClose: Optional[float] = None
+    premiumStopPctAtClose: Optional[float] = None
+    premiumStopPriceAtClose: Optional[float] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "ClosedPositionSchema":
@@ -1589,6 +1604,11 @@ class ClosedPositionSchema(BaseModel):
             realizedPnlDollar=obj.realized_pnl_dollar,
             realizedPnlPct=obj.realized_pnl_pct,
             closedAt=obj.closed_at.isoformat() if obj.closed_at else "",
+            exitReason=obj.exit_reason,
+            stopAtClose=obj.stop_at_close,
+            structuralStopAtClose=obj.structural_stop_at_close,
+            premiumStopPctAtClose=obj.premium_stop_pct_at_close,
+            premiumStopPriceAtClose=obj.premium_stop_price_at_close,
         )
 
 

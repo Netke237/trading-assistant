@@ -24,6 +24,14 @@ class ClosedPositionModel(Base):
     realized_pnl_pct = Column(Float, nullable=False)
     source = Column(String, nullable=True)
     closed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    # PORTFOLIO-EXIT-RECORD: why the trade was closed and the stop it had at
+    # that close, snapshotted from the locked open position. All nullable with
+    # no default: rows written before this change stay NULL ("not recorded").
+    exit_reason = Column(String(20), nullable=True)
+    stop_at_close = Column(Float, nullable=True)
+    structural_stop_at_close = Column(Float, nullable=True)
+    premium_stop_pct_at_close = Column(Float, nullable=True)
+    premium_stop_price_at_close = Column(Float, nullable=True)
 
 
 class EquitySnapshotModel(Base):
