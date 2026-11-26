@@ -8895,7 +8895,16 @@
       "branch": "board/search-profiles-recal-options-20a39a3a",
       "tracking_issue": 187,
       "audit_rounds": 3,
-      "audit_clean": true,
+      "audit_clean": false,
+      "record_correction": {
+        "date": "2026-11-26",
+        "approved_by": "Kenneth, in the J1 (#115) session, 2026-11-26",
+        "issue_comment": "https://github.com/Netke237/trading-assistant/issues/187#issuecomment-7051060284",
+        "why": "The phase goal was to re-derive every profile value from measured evidence; that was never done. search-profiles-export.json at f61399ad^1 vs f61399ad: 0 of 18 profiles differ in any value (only updatedAt; envelope version 3 -> 5). The acceptance line 'Measured profile runs recorded and independently recomputed' was never met: backend/scripts/run_options_profiles_measurement.py was never run live and no options_profiles_* output exists on any branch. The three audit rounds were real and returned what plan_stage/code_stage record, but they reviewed the plan text, schema sync and tests, not whether the values were measured, so they cannot close the phase goal.",
+        "what_audit_clean_false_means": "Per audit_rule, status=shipped with audit_clean=false is NOT finished: the schema-v5 sync, harness and runbook are merged; the recalibration itself is outstanding. plan_stage/code_stage and audit_history are left as the historical record of the rounds that ran; no counter was reset.",
+        "honest_basis_per_value": "Liquidity tiers, shortlist caps, SemiAnnual event 7/30, D/E 3/10: judgement (2026-09-15 / 09-29 / 10-11). SemiAnnual Restrictive volume 50: judgement from one Baseline run. Hold/DTE windows: design rule. Fundamentals gate, delta bands, IV ceilings, spreads block: seeds. min_stock_score 45: measured but thin (2 MEAS days, 5 names, Position, bearish). No MEAS scan has ever covered Intraday or SemiAnnual.",
+        "remaining_to_finish": "At least one live run of run_options_profiles_measurement.py recorded and independently recomputed, then each value re-derived or explicitly labelled judgement in the README; liquidity tiers, delta/DTE, IV ceilings and spreads additionally need historical option chains (not stored) or more live days. Whether and when to do this is Kenneth's call."
+      },
       "plan_stage": {
         "rounds": 2,
         "clean": true,
@@ -8945,10 +8954,10 @@
         "pattern": "run_options_profiles_measurement",
         "note": "PRESENCE ONLY of options search profiles measurement harness for the mini PC (#187)."
       },
-      "completion_pct": 100,
+      "completion_pct": 35,
       "size": "L",
       "complexity": 4,
-      "note": "Code stage clean after 1 round (continuous round 3). 18 Options search profiles recalibrated to schema v5, harness + runbook complete. || SHIPPED, reconciled 2026-11-08: PR #508 merged at f61399ad. Earlier text in this field that says not merged or pending predates that merge.",
+      "note": "NOT FINISHED, corrected 2026-11-26 (see record_correction): no profile value was re-derived; PR #508 synced the export to schema v5 and added the measurement harness + runbook, which has never been run live. completion_pct 35 = schema sync, harness, runbook and tests done; measured runs, independent recompute and per-value derivation not done. || Earlier text, kept for history: Code stage clean after 1 round (continuous round 3). 18 Options search profiles recalibrated to schema v5, harness + runbook complete. || SHIPPED, reconciled 2026-11-08: PR #508 merged at f61399ad. Earlier text in this field that says not merged or pending predates that merge.",
       "merge_commit": "f61399add872107585d826b1f844aa354549d520"
     },
     {
