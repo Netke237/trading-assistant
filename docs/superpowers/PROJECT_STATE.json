@@ -11813,10 +11813,10 @@
       "branch": "board/portfolio-alert-action-255a4b3c",
       "size": "L",
       "complexity": 4,
-      "completion_pct": 80,
+      "completion_pct": 90,
       "plan": "docs/superpowers/plans/2026-11-27-portfolio-alert-action-plan.md",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "verify": {
         "kind": "present",
@@ -11824,7 +11824,7 @@
         "pattern": "def split_episodes",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-27 taken by board worker. Point 4 (automatic exit / any order placement) PARKED by Kenneth's decision in chat 2026-11-27: out of scope, not built, not a needs-kenneth question. Plan drafted; plan audit pending. Plan round 1 (fresh gate-auditor aa44e11e52f7873a2) on plan @0db8aa82: 4 gate findings - (1) notifier start would move forward as history is pruned, freezing 'Active for 30 days' and wrong trigger date; (2) truncated episodes would show a wrong 'since' date; (3) daily summary 'success' did not detect swallowed quote failures; (4) alertStore episodes not in partialize/merge, wiped on every hydration. All fixed in plan at 3065e327. Plan round 2 (fresh gate-auditor aa5c6722303f8f02a) on git diff 0db8aa82..3065e327: 2 gate findings - (1) legacy _first_seen seed could predate the current episode and overstate 'since before'; (2) updating last_seen before gating would hide a new episode while a type is muted. Fixed in plan: no legacy seed; episode-state update on every call against the previous last_seen, gating only the send; failure restores only last_sent. Plan round 3 (fresh gate-auditor a206cf96e83981da7) on git diff 3065e327..a6680435: 0 gate findings - plan clean. Below-gate note logged into ticket T2: also re-save alert_dedup.json on a send-failure rollback (as today). Tickets #706 T1 (d851ede0), #707 T2 (433017f6), #708 T3 (079334c1), #709 T4 (a64dc25a), #710 T5 (df3813d8) built, coordinator-verified and closed. Coordinator full runs: backend per ticket in clean checkouts (only known Windows-only failures plus load-timing flakes that pass alone: tradier governor, heston_perf); full frontend on df3813d8 idle: 388/388 suites, 6958 tests; typecheck clean. Postgres migration up/down run by the T3 implementer against a throwaway postgres:15 container. origin/main already merged (0 new commits at df3813d8). Code audit pending.",
+      "note": "2026-11-27 taken by board worker. Point 4 (automatic exit / any order placement) PARKED by Kenneth's decision in chat 2026-11-27: out of scope, not built, not a needs-kenneth question. Plan drafted; plan audit pending. Plan round 1 (fresh gate-auditor aa44e11e52f7873a2) on plan @0db8aa82: 4 gate findings - (1) notifier start would move forward as history is pruned, freezing 'Active for 30 days' and wrong trigger date; (2) truncated episodes would show a wrong 'since' date; (3) daily summary 'success' did not detect swallowed quote failures; (4) alertStore episodes not in partialize/merge, wiped on every hydration. All fixed in plan at 3065e327. Plan round 2 (fresh gate-auditor aa5c6722303f8f02a) on git diff 0db8aa82..3065e327: 2 gate findings - (1) legacy _first_seen seed could predate the current episode and overstate 'since before'; (2) updating last_seen before gating would hide a new episode while a type is muted. Fixed in plan: no legacy seed; episode-state update on every call against the previous last_seen, gating only the send; failure restores only last_sent. Plan round 3 (fresh gate-auditor a206cf96e83981da7) on git diff 3065e327..a6680435: 0 gate findings - plan clean. Below-gate note logged into ticket T2: also re-save alert_dedup.json on a send-failure rollback (as today). Tickets #706 T1 (d851ede0), #707 T2 (433017f6), #708 T3 (079334c1), #709 T4 (a64dc25a), #710 T5 (df3813d8) built, coordinator-verified and closed. Coordinator full runs: backend per ticket in clean checkouts (only known Windows-only failures plus load-timing flakes that pass alone: tradier governor, heston_perf); full frontend on df3813d8 idle: 388/388 suites, 6958 tests; typecheck clean. Postgres migration up/down run by the T3 implementer against a throwaway postgres:15 container. origin/main already merged (0 new commits at df3813d8). Code audit pending. Code audit round 1 (fresh gate-auditor a46c1b8e0cfaec739) on git diff origin/main..df3813d8: 0 gate findings - code clean.",
       "plan_stage": {
         "rounds": 3,
         "clean": true,
@@ -11833,8 +11833,11 @@
         "reviewed": "plan @0db8aa82; git diff 0db8aa82..3065e327; git diff 3065e327..a6680435"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "fresh gate-auditor a46c1b8e0cfaec739 (round 1)",
+        "reviewed": "git diff origin/main..df3813d8 (origin/main 6f5881cd)"
       }
     }
   ],
