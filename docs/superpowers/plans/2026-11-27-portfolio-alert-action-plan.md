@@ -140,40 +140,51 @@ Pruning moves the earliest surviving history row forward every day once an
 episode is older than the retention window, so the history start is a **lower
 bound on information, not the start** when truncated. The record therefore
 keeps the earliest start it has ever learned and never moves it forward
-(plan-audit r1 finding 1). `last_seen` is updated on every call for the key,
-**before** the master/type gating returns, so a muted type still keeps its
-record current. Decision under `_fired_lock` (H = history `(start, truncated)`
-or None):
-1. **New episode** when any of: there is no record; `now − record.last_seen >
+(plan-audit r1 finding 1). **Episode-state update runs on every call for the key, inside `_fired_lock`
+and before the master/type gating** (plan-audit r2 finding 2): rules 1–3 below
+(boundary detection, start, truncated) are evaluated against the record's
+**previous** `last_seen`, and only after the decision is `last_seen = now`
+written. The gating then decides only whether to *send* (rule 4) and so whether
+`last_sent` changes. A muted or globally disabled call therefore still creates
+or resets the record with a proper start when it detects a new episode — never
+a bare `{last_seen}` record — so un-muting later reports the current episode's
+start, not an old one. Decision (H = history `(start, truncated)` or None;
+`prev_seen` = the record's `last_seen` before this call):
+1. **New episode** when any of: there is no record; `now − prev_seen >
    gap` (we have not seen the condition for longer than an episode gap); or H
-   is given, **not** truncated, and `H.start > record.last_seen` (history shows
+   is given, **not** truncated, and `H.start > prev_seen` (history shows
    the run restarted after we last saw it). A truncated H never by itself
    starts a new episode.
 2. New episode → `record.start, record.truncated = H` when given, else
-   `(now, False)`. **Legacy seed (once, at deploy):** when no record exists, H
-   is truncated, and a legacy `_first_seen` entry for the key is earlier than
-   H.start, use the legacy time as the start, still `truncated = True` (the
-   legacy time is the first fire ever, not necessarily this episode's start), so
-   messages read "since before <legacy date>".
+   `(now, False)`; `last_sent = None` (nothing sent yet in this episode). There
+   is **no legacy seed**: `_first_seen` holds the first fire ever and is never
+   reset when a condition clears, so it can predate the current episode and
+   would overstate "since before" (plan-audit r2 finding 1). A truncated H is a
+   true lower bound ("30+ days, since before 28.10.2026") and is used as is.
 3. Same episode → `if H and H.start < record.start: record.start, record.truncated = H`
    (only ever moves earlier); otherwise the record is unchanged.
-4. New episode → send the first-fire message (`Triggered:` = record start;
-   prefixed "before " when truncated).
-   Same episode → send a reminder only when `now − last_sent ≥ 24 h`; otherwise
-   suppress (return False, no send).
-5. Optimistic hold + rollback exactly like today: the record is updated before
-   the send; on failure the previous record is restored (new-episode failure
-   retries as new; reminder failure retries as reminder).
+4. **Send decision (gated):** master off or type disabled → no send, return
+   False (the state update above stays). Otherwise: new episode, or a record
+   with `last_sent = None` → send the first-fire message (`Triggered:` = record
+   start; prefixed "before " when truncated), so a condition first seen while
+   muted gets its first-fire message on un-mute, dated at its real start. Same episode with `last_sent` set → send
+   a reminder only when `now − last_sent ≥ 24 h`; otherwise suppress (return
+   False, no send).
+5. Optimistic hold + rollback like today: `last_sent = now` is claimed under
+   the lock before the send; on failure **only `last_sent`** is restored to its
+   pre-send value (the episode state from rules 1–3 stays), so a failed
+   first-fire retries as first-fire (`last_sent` back to None) and a failed
+   reminder retries as reminder.
 6. The file is re-saved only when the decision sends, the start changes, or
    `last_seen` advanced by ≥ 1 h (no per-tick disk write).
 Reminder body adds `Active for <duration> (since dd.mm.yyyy)` computed from the
 record start (`N+ days (since before dd.mm.yyyy)` when truncated), keeping the
 original `Triggered:` and "Still active as of" lines. `forget_alerts` also drops
 `episodes` entries for closed rec_ids (same first-`|` split). Existing legacy
-`_fired` entries for episode types are ignored by the new path, and legacy
-`_first_seen` is read only for the seed in rule 2 (so right after deploy each
-currently active condition sends one first-fire message); both are still cleared
-by `forget_alerts`.
+`_fired` and `_first_seen` entries for episode types are not read by the new
+path (so right after deploy each currently active condition sends one
+first-fire message, dated at its history start or "before" it when truncated);
+both are still cleared by `forget_alerts`.
 
 Callers pass the start:
 - `portfolio_alert_monitor._run_once`: after the generation commit, one
@@ -229,8 +240,9 @@ stays same episode; failure rollback both branches; restart reload; legacy state
 ignored; REGIME_CHANGE and auto-trader path unchanged (window semantics);
 record start never moves forward as history is pruned (BMY 18.10 under
 30-day retention keeps 18.10 in every reminder; a fresh-deploy truncated start
-renders "since before"); legacy `_first_seen` seed; muted type keeps
-`last_seen` current; summary: once per Berlin day, not before 09:00, not on
+renders "since before"); legacy `_first_seen` never used as a start; a type
+muted across a >72 h clear and later un-muted reports the new episode's start
+and sends a first-fire message; the decision uses the previous `last_seen`; summary: once per Berlin day, not before 09:00, not on
 generation failure, not when a symbol or option quote is missing before 12:00,
 sent with the "without a quote" line after 12:00,
 zero-item day, distinct-position counts, disabled type excluded, failed send
