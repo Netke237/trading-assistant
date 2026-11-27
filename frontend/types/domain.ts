@@ -1074,7 +1074,7 @@ export interface NewsItem {
 
 export interface AlertConfig {
   dedupWindowMinutes: number;      // default 15 — min spacing before re-reporting to backend
-  reminderIntervalHours: number;   // default 4 — email/Telegram reminder gap while a condition stays true
+  reminderIntervalHours: number;   // default 4 — how often a still-true condition is re-logged to alert history (and the regime-change reminder gap); portfolio stop/target email/Telegram use the fixed episode cadence instead (once a day per active alert + daily 09:00 summary)
   checkIntervalSeconds: number;    // default 60 — how often background monitors re-check conditions
   enabledTypes: AlertType[];
   soundEnabled: boolean;
