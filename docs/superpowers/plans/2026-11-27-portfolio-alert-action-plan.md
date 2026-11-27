@@ -72,7 +72,12 @@ so a user with a long reminder window does not get a new episode on every row.
 `< 1 h` → "under 1 h"; `< 24 h` → "N h" (floor); else "N days" (floor of whole
 24 h periods, "1 day" singular); truncated → "N+ days". The date shown next to it
 ("since 18 Oct" in the UI, "since 18.10.2026" in messages) is the episode start
-in the reader's zone (browser local / Europe/Berlin).
+in the reader's zone (browser local / Europe/Berlin). **When the start is
+truncated** the date is the earliest *known* fire, not the condition's start, so
+it is rendered "since before 28 Oct" / "since before 28.10.2026" together with
+"N+ days" — in the Action list, the daily summary and every notifier message.
+An exact date or count is shown only for a non-truncated start (plan-audit r1
+finding 2).
 
 **Action types** (Action list, daily summary): `STOP_REACHED`,
 `STRUCTURAL_STOP_BREACHED`, `PREMIUM_STOP`, `TP_HIT`, `TIME_STOP`.
@@ -100,8 +105,9 @@ New `backend/app/services/alert_episodes.py`:
 - `async current_episodes(db, rec_ids, now, alert_types=None) -> dict[(rec_id, type), EpisodeView]`
   — one query over `position_alert_history` for those rec_ids (ordered), then
   `split_episodes` per key; returns current episodes only, with `truncated`.
-- `async episode_start(db, rec_id, alert_type, now) -> datetime | None`
-  — the current episode's start for one key (used by the notifier callers).
+- `async episode_start(db, rec_id, alert_type, now) -> EpisodeStart | None`
+  — the current episode's `(start, truncated)` for one key (used by the notifier
+  callers; `current_episodes` carries `truncated` too).
 
 Endpoints in `backend/app/routers/alerts.py` (read-only, no writes, no commit):
 - `GET /api/alerts/episodes` →
@@ -122,55 +128,85 @@ duration text table (shared with the TS test).
 
 ### 2. Escalation (backend notifications)
 
-`alert_notifier.notify_alert` gains `episode_start: datetime | None = None`.
-For an episode-notified type (and `rec_id != 'regime'`), the window/`_first_seen`
-path is replaced by per-key episode state persisted in `alert_dedup.json` under
-a new `episodes` map: `{start, last_seen, last_sent}` (epoch seconds), loaded
-tolerantly (missing/garbled → `{}`), written atomically with the existing saver.
-Decision under `_fired_lock`:
-1. `start = episode_start` if given; else (lookup failed / no row) keep the
-   recorded start when the record exists and `now − last_seen ≤ gap`, else
-   `now`.
-2. **New episode** when there is no record, or `start > record.last_seen`
-   (the run restarted after we last saw the condition). Pruning only moves a
-   history start *forward* and never past `last_seen`, so a long episode whose
-   first rows were pruned is **not** mistaken for a new one.
-3. New episode → send the first-fire message (`Triggered:` = episode start).
+`alert_notifier.notify_alert` gains `episode_start: EpisodeStart | None = None`
+(`(start, truncated)` from history). For an episode-notified type (and
+`rec_id != 'regime'`), the window/`_first_seen` path is replaced by per-key
+episode state persisted in `alert_dedup.json` under a new `episodes` map:
+`{start, truncated, last_seen, last_sent}` (epoch seconds + bool), loaded
+tolerantly (missing/garbled entry → dropped), written atomically with the
+existing saver.
+
+Pruning moves the earliest surviving history row forward every day once an
+episode is older than the retention window, so the history start is a **lower
+bound on information, not the start** when truncated. The record therefore
+keeps the earliest start it has ever learned and never moves it forward
+(plan-audit r1 finding 1). `last_seen` is updated on every call for the key,
+**before** the master/type gating returns, so a muted type still keeps its
+record current. Decision under `_fired_lock` (H = history `(start, truncated)`
+or None):
+1. **New episode** when any of: there is no record; `now − record.last_seen >
+   gap` (we have not seen the condition for longer than an episode gap); or H
+   is given, **not** truncated, and `H.start > record.last_seen` (history shows
+   the run restarted after we last saw it). A truncated H never by itself
+   starts a new episode.
+2. New episode → `record.start, record.truncated = H` when given, else
+   `(now, False)`. **Legacy seed (once, at deploy):** when no record exists, H
+   is truncated, and a legacy `_first_seen` entry for the key is earlier than
+   H.start, use the legacy time as the start, still `truncated = True` (the
+   legacy time is the first fire ever, not necessarily this episode's start), so
+   messages read "since before <legacy date>".
+3. Same episode → `if H and H.start < record.start: record.start, record.truncated = H`
+   (only ever moves earlier); otherwise the record is unchanged.
+4. New episode → send the first-fire message (`Triggered:` = record start;
+   prefixed "before " when truncated).
    Same episode → send a reminder only when `now − last_sent ≥ 24 h`; otherwise
    suppress (return False, no send).
-4. Optimistic hold + rollback exactly like today: the record is updated before
+5. Optimistic hold + rollback exactly like today: the record is updated before
    the send; on failure the previous record is restored (new-episode failure
    retries as new; reminder failure retries as reminder).
-5. `last_seen` advances on every call; the file is re-saved only when the
-   decision sends, the start changes, or `last_seen` advanced by ≥ 1 h (no
-   per-tick disk write).
-Reminder body adds `Active for <duration> (since dd.mm.yyyy)`, keeping the
+6. The file is re-saved only when the decision sends, the start changes, or
+   `last_seen` advanced by ≥ 1 h (no per-tick disk write).
+Reminder body adds `Active for <duration> (since dd.mm.yyyy)` computed from the
+record start (`N+ days (since before dd.mm.yyyy)` when truncated), keeping the
 original `Triggered:` and "Still active as of" lines. `forget_alerts` also drops
 `episodes` entries for closed rec_ids (same first-`|` split). Existing legacy
-`_fired`/`_first_seen` entries for episode types are ignored by the new path (so
-right after deploy each currently active condition sends one first-fire message,
-dated at its history start); they are still cleared by `forget_alerts`.
+`_fired` entries for episode types are ignored by the new path, and legacy
+`_first_seen` is read only for the seed in rule 2 (so right after deploy each
+currently active condition sends one first-fire message); both are still cleared
+by `forget_alerts`.
 
 Callers pass the start:
 - `portfolio_alert_monitor._run_once`: after the generation commit, one
   `current_episodes` call (new session) for the rec_ids in this tick's alerts;
-  pass each alert's start. Lookup failure → `None` (fallback rule 1).
+  pass each alert's `(start, truncated)`. Lookup failure → `None` (rule 1/2
+  fall back to the record, or `now` for a brand-new record).
 - `routers/alerts.post_alert_notify`: after its commit, `episode_start(db, …)`.
 
 **Daily summary.** `alert_notifier.notify_daily_summary(items, now)` plus
 summary-day state (`summary_day`, Berlin `YYYY-MM-DD`) in `alert_dedup.json`.
 The monitor calls it at the end of `_run_once` when **all** hold: generation
-succeeded this tick (no exception, quotes fetched), Berlin local time ≥ 09:00,
-and `summary_day` ≠ today. Items = this tick's alerts of the action types whose
+succeeded this tick, Berlin local time ≥ 09:00, and `summary_day` ≠ today.
+**Succeeded** is concrete (plan-audit r1 finding 3), because `fetch_quotes`
+swallows errors into `{}` and drops unquoted symbols, and option quote failures
+are swallowed by `gather(return_exceptions=True)`: no exception in the
+generation block **and** every open position's symbol has a stock quote **and**
+every open option contract has an option quote this tick. If not, `summary_day`
+is not set and the next tick retries. Deadline: from 12:00 Berlin the summary is
+sent even with missing quotes, with an explicit line
+`N positions without a quote: SYM, SYM` (and those positions are excluded from
+the counts, which the line makes visible); the zero-item rule then requires
+zero items **and** zero unquoted positions. Items = this tick's alerts of the action types whose
 notification is enabled for that position (`effective_enabled` override, else
 global `enabledTypes`), joined with their current episode start/truncation.
-- Zero items → no message, `summary_day = today` (one decision per day).
+- Zero items (and every position quoted) → no message, `summary_day = today`
+  (one decision per day).
 - Otherwise one message: subject
   `Bamendjou Portfolio — daily summary: 3 positions past stop, 1 at target, 1 time stop`
   (categories with zero omitted; "past stop" = any of STOP_REACHED /
   STRUCTURAL_STOP_BREACHED / PREMIUM_STOP; counts are **distinct positions** per
   category; singular "1 position"), body one line per (position, type), e.g.
-  `BMY — Stop hit, active 40 days (since 18.10.2026)`; Telegram HTML escaped
+  `BMY — Stop hit, active 9 days (since 18.11.2026)` or, truncated,
+  `BMY — Stop hit, active 30+ days (since before 28.10.2026)`; Telegram HTML escaped
   like `_build_notification`.
 - `summary_day` is set only after a confirmed delivery (or the zero-item case);
   a failed send retries on the next tick.
@@ -191,7 +227,12 @@ tests): first fire sends once; same-day repeats suppressed; reminder at ≥ 24 h
 and not at 23 h 59; condition gap > 72 h → new first-fire; pruned-start episode
 stays same episode; failure rollback both branches; restart reload; legacy state
 ignored; REGIME_CHANGE and auto-trader path unchanged (window semantics);
-summary: once per Berlin day, not before 09:00, not on generation failure,
+record start never moves forward as history is pruned (BMY 18.10 under
+30-day retention keeps 18.10 in every reminder; a fresh-deploy truncated start
+renders "since before"); legacy `_first_seen` seed; muted type keeps
+`last_seen` current; summary: once per Berlin day, not before 09:00, not on
+generation failure, not when a symbol or option quote is missing before 12:00,
+sent with the "without a quote" line after 12:00,
 zero-item day, distinct-position counts, disabled type excluded, failed send
 retried; log rows unchanged for a 3-day simulated run (monitor + browser POSTs).
 
@@ -258,8 +299,9 @@ run.
   the information the banners showed stays visible on both tabs (no silent
   removal). Nothing else on the page moves.
 - Existing `stopBreachBanner.test.tsx` expectations stay true (sentence, role,
-  buttons); new tests: `actionNeeded.test.ts` (evidence fixtures: BMY stop 40
-  days since 18 Oct, truncated "30+ days", TP_HIT + TIME_STOP, premium-stop
+  buttons); new tests: `actionNeeded.test.ts` (evidence fixtures: BMY stop
+  9 days since 18 Nov from a non-truncated episode; BMY since 18 Oct under 30-day
+  retention → "30+ days, since before 28 Oct"; TP_HIT + TIME_STOP, premium-stop
   label by side, new/no-episode, fetch failure, sorting, mute ignored) and a
   page test (list renders, buttons open editor/close drawer, Close from the
   History tab switches to Open).
@@ -268,7 +310,12 @@ run.
 
 `alertStore` (persisted, `bamendjou-alerts-v2`): version 3 → 4; new persisted
 `episodes: Record<key, { startedAt: string; lastSeenAt: number; lastSurfacedAt: number }>`.
-`migrateAlerts` defaults it to `{}` and its STRUCTURAL_STOP_BREACHED backfill
+`episodes` is added to **`partialize`** (so it is written) and to **`merge()`**
+(`episodes: ps.episodes ?? {}`, so it survives every hydration — `merge` rebuilds
+the state from an explicit field list), and `migrateAlerts` keeps it through the
+same tolerant record check it applies to `suppressedAlerts` (entries with a
+non-string `startedAt` or non-finite numbers dropped) (plan-audit r1 finding 4).
+Its STRUCTURAL_STOP_BREACHED backfill
 condition changes from `_version < ALERT_STORE_VERSION` to `_version < 3` so the
 bump does not re-run it. For `POSITION_ALERT_TYPES` only (scan lifecycle types
 unchanged), in `addToast`:
@@ -290,7 +337,9 @@ unchanged), in `addToast`:
 episode after 72 h re-toasts an acknowledged condition; acknowledged condition
 re-surfaces once after 24 h and not before; un-dismiss on reminder; POST cadence
 unchanged (spy); scan types unaffected; v3→v4 migration keeps toasts and does
-not re-add an unchecked STRUCTURAL_STOP_BREACHED.
+not re-add an unchecked STRUCTURAL_STOP_BREACHED; a persist→rehydrate round
+trip keeps `episodes` and keeps an acknowledged condition suppressed (no
+re-toast, no chime after reload).
 
 ## Tickets (sequential; each ends green on its own)
 
@@ -321,4 +370,5 @@ touched by any ticket.
 - [ ] Dispatch tests: one message per episode start, one reminder per day, daily summary; no lost fires in the log.
 - [ ] History flag for target-then-loss trades.
 - [ ] Python 3.11; typecheck + full tests green; plan audit and code audit clean (`audit_rule`).
+- [ ] Truncated episodes never show an exact date or count.
 - [ ] Point 4 not built; no order placement added anywhere.
