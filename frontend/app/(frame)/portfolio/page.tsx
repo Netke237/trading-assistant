@@ -17,6 +17,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
 import { BrokerAttemptPanel } from '@/components/organisms/BrokerAttemptPanel';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
+import { exitReasonLabel, type ExitReason } from '@/lib/exitReason';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
@@ -40,10 +41,10 @@ import { premiumStopDropText } from '@/lib/premiumStop';
 import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAtStopTotal } from '@/lib/portfolioTotals';
 import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
 import {
-  computeTradeStats, filterTrades, sortTrades, exitCheck, holdDays, returnPct, tradeLabel,
+  computeTradeStats, filterTrades, sortTrades, exitCheck, stopPctFor, holdDays, returnPct, tradeLabel,
   type TradeFilter, type SortKey, type SortDir,
 } from '@/lib/tradeStats';
-import { TradeStatsStrip, stopTooltip } from './TradeStatsStrip';
+import { TradeStatsStrip, stopTooltip, rowStopTooltip } from './TradeStatsStrip';
 
 /** `−5.2%` / `+9.6%`, one decimal, Unicode minus. */
 function formatBreachPct(v: number): string {
@@ -51,8 +52,9 @@ function formatBreachPct(v: number): string {
   return Number(v.toFixed(1)) < 0 ? `${MINUS}${s}%` : `+${s}%`;
 }
 
-// Existing columns first; RETURN, HOLD, EXIT CHECK sit between P&L and the remove button.
-const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 56px';
+// Existing columns first; RETURN, HOLD, EXIT CHECK, EXIT REASON sit between P&L and the remove button.
+// Keep in step with `.historyRow` in page.module.css.
+const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 72px 56px 1.3fr 1fr 56px';
 
 /** Tone for the resolved volatility figure. The bands are the same numbers on
  *  both bases today — 70 is `max_iv_abs`/`max_iv_rank` in contract_rules.yaml,
@@ -313,7 +315,7 @@ export default function PortfolioPage() {
     tabRefs.current[next]?.focus();
   };
 
-  const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
+  const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string; exitReason: ExitReason }) => {
     setCloseError(null);
     const { ok, detail } = await closeRemote(p.recId, opts);
     if (ok) {
@@ -525,6 +527,7 @@ export default function PortfolioPage() {
             <span title={stopTooltip(premiumStopPct)} data-testid="history-exitcheck-header">
               <Text size={11} tone="dim">EXIT CHECK</Text>
             </span>
+            <Text size={11} tone="dim">EXIT REASON</Text>
             <span aria-hidden />
           </div>
           {sortedHistory.length === 0 && (
@@ -533,7 +536,8 @@ export default function PortfolioPage() {
           {sortedHistory.map((h) => {
             const ret = returnPct(h);
             const hd = holdDays(h);
-            const ec = exitCheck(h, premiumStopPct);
+            const stop = stopPctFor(h, premiumStopPct);
+            const ec = exitCheck(h, stop.pct);
             return (
             <div key={h.id} className={styles.historyRow} data-testid="history-row">
               <span data-testid="history-symbol"><Data size={13} weight={500}>{h.symbol}</Data></span>
@@ -549,8 +553,11 @@ export default function PortfolioPage() {
               <span data-testid="history-hold">
                 <Data size={12}>{hd === null ? '—' : `${hd}d`}</Data>
               </span>
-              <span data-testid="history-exitcheck" title={stopTooltip(premiumStopPct)}>
+              <span data-testid="history-exitcheck" title={rowStopTooltip(stop)}>
                 <Text size={11} tone={ec.kind === 'past-stop' ? 'reject' : ec.kind === 'within-stop' ? 'caution' : 'secondary'}>{ec.label}</Text>
+              </span>
+              <span data-testid="history-exitreason">
+                <Text size={11} tone="secondary">{exitReasonLabel(h.exitReason)}</Text>
               </span>
               <span className={styles.historyActions}>
                 <Link href={`/journal?symbol=${encodeURIComponent(h.symbol)}`} className={styles.historyRemove} aria-label={`Open journal for ${h.symbol}`} title="Open journal for this symbol">↗</Link>
@@ -825,6 +832,7 @@ export default function PortfolioPage() {
               {closeError && <Text size={12} tone="reject">{closeError}</Text>}
               <ClosePositionDrawer
                 position={p}
+                premiumStopPct={premiumStopPct}
                 onCancel={dismiss}
                 onConfirm={(opts) => confirmClose(p, opts)}
               />

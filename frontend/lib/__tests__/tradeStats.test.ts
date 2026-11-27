@@ -1,5 +1,6 @@
 import {
   classOf, holdDays, returnPct, exitCheck, computeTradeStats, filterTrades, sortTrades, tradeLabel,
+  stopPctFor,
 } from '../tradeStats';
 import type { ClosedPosition } from '../performanceStore';
 
@@ -128,7 +129,37 @@ describe('exitCheck', () => {
   });
 });
 
+describe('stopPctFor (PORTFOLIO-EXIT-RECORD)', () => {
+  it('uses the stop stored at close when recorded', () => {
+    expect(stopPctFor(row({ premiumStopPctAtClose: 0.4 }), 0.6)).toEqual({ pct: 0.4, source: 'stored' });
+  });
+  it('falls back to the global stop when not recorded (null or absent)', () => {
+    expect(stopPctFor(row({ premiumStopPctAtClose: null }), 0.6)).toEqual({ pct: 0.6, source: 'global' });
+    expect(stopPctFor(row(), 0.6)).toEqual({ pct: 0.6, source: 'global' });
+  });
+  it('a 45% option loss is past a stored 40% stop although the global 60% would say within', () => {
+    const h = row({ realizedPnlDollar: -100, realizedPnlPct: -45, premiumStopPctAtClose: 0.4 });
+    expect(exitCheck(h, 0.6).kind).toBe('within-stop');
+    expect(exitCheck(h, stopPctFor(h, 0.6).pct)).toEqual({ kind: 'past-stop', lossPct: 45, label: 'Lost 45%: past 40% premium stop' });
+  });
+  it('without a stored stop the global decides', () => {
+    const h = row({ realizedPnlDollar: -100, realizedPnlPct: -45 });
+    expect(exitCheck(h, stopPctFor(h, 0.6).pct).kind).toBe('within-stop');
+    expect(exitCheck(h, stopPctFor(h, 0.4).pct).kind).toBe('past-stop');
+  });
+});
+
 describe('computeTradeStats', () => {
+  it('pastStop counts follow each row stored stop, else the global', () => {
+    const s = computeTradeStats([
+      row({ realizedPnlDollar: -100, realizedPnlPct: -45, premiumStopPctAtClose: 0.4 }), // past (stored 40%)
+      row({ realizedPnlDollar: -100, realizedPnlPct: -45 }), // within (global 60%)
+      row({ realizedPnlDollar: -100, realizedPnlPct: -70, premiumStopPctAtClose: 0.8 }), // within (stored 80%)
+      row({ realizedPnlDollar: -100, realizedPnlPct: -70, premiumStopPctAtClose: null }), // past (global 60%)
+    ], 0.6);
+    expect(s.pastStop).toEqual({ n: 2, of: 4 });
+  });
+
   it('reproduces the pinned 2026-11-17 numbers', () => {
     const s = computeTradeStats(fixture(), 0.6);
     expect(s.count).toBe(8);

@@ -7,13 +7,23 @@
 
 import { Text, Data } from '@/components/primitives';
 import { formatMoney, moneyTone } from '@/lib/portfolioFormat';
-import type { TradeStats } from '@/lib/tradeStats';
+import type { TradeStats, StopSource } from '@/lib/tradeStats';
 import styles from './page.module.css';
 
 const DASH = '—';
 
+const pctText = (p: number): string => `${Math.round(p * 100)}%`;
+
+/** Header / stats-strip tooltip. `stopPct` is today's global premium stop. */
 export function stopTooltip(stopPct: number): string {
-  return `Compared with today's global premium stop (${Math.round(stopPct * 100)}%), not the stop that applied at entry — the stop at entry is not stored yet.`;
+  return `Compared with the premium stop stored when each trade was closed; trades closed before that was recorded use today's global premium stop (${pctText(stopPct)}).`;
+}
+
+/** Per-row exit-check tooltip: which stop judged this row. */
+export function rowStopTooltip(stop: { pct: number; source: StopSource }): string {
+  return stop.source === 'stored'
+    ? `Premium stop at close: ${pctText(stop.pct)}`
+    : `Stop not recorded for this trade — using today's ${pctText(stop.pct)} premium stop`;
 }
 
 function money(v: number | null): string {

@@ -71,7 +71,7 @@ describe('History trade statistics strip', () => {
     expect(val('stat-hold')).toBe('76 days (6–111)');
     expect(screen.getByTestId('stat-paststop-cell')).toHaveTextContent('Past premium stop: 4 of 5 losses');
     expect(screen.getByTestId('stat-paststop-cell').getAttribute('title')).toBe(
-      "Compared with today's global premium stop (60%), not the stop that applied at entry — the stop at entry is not stored yet.");
+      "Compared with the premium stop stored when each trade was closed; trades closed before that was recorded use today's global premium stop (60%).");
   });
 
   it('recomputes under the Wins and Losses filters', () => {
@@ -173,6 +173,32 @@ describe('History sort', () => {
   });
 });
 
+describe('History exit record (PORTFOLIO-EXIT-RECORD)', () => {
+  it('Exit reason column shows the label, and Not recorded for null or absent', () => {
+    setup([
+      row(0, 'AAA', -100, -45, 5, { exitReason: 'premium_stop' }),
+      row(1, 'BBB', -100, -45, 5, { exitReason: 'structural_stop' }),
+      row(2, 'CCC', 100, 10, 5, { exitReason: null }),
+      row(3, 'DDD', 100, 10, 5),
+    ]);
+    expect(screen.getAllByTestId('history-exitreason').map((e) => e.textContent))
+      .toEqual(['Premium stop', 'Structural stop', 'Not recorded', 'Not recorded']);
+  });
+
+  it('exit check uses the stored stop when recorded, else the global, and the tooltip says which', () => {
+    setup([
+      row(0, 'AAA', -100, -45, 5, { premiumStopPctAtClose: 0.4 }),
+      row(1, 'BBB', -100, -45, 5),
+    ]);
+    const cells = screen.getAllByTestId('history-exitcheck');
+    expect(cells[0].textContent).toBe('Lost 45%: past 40% premium stop');
+    expect(cells[0]).toHaveAttribute('title', 'Premium stop at close: 40%');
+    expect(cells[1].textContent).toBe('Within premium stop');
+    expect(cells[1]).toHaveAttribute('title', "Stop not recorded for this trade — using today's 60% premium stop");
+    expect(screen.getByTestId('stat-paststop-cell')).toHaveTextContent('Past premium stop: 1 of 2 losses');
+  });
+});
+
 describe('History structure', () => {
   it('heatmap still gets the unfiltered history', () => {
     setup();
@@ -184,11 +210,12 @@ describe('History structure', () => {
     setup();
     const header = screen.getByTestId('history-header');
     const text = header.textContent ?? '';
-    const idx = ['SYMBOL', 'CONTRACT', 'QTY · ENTRY → EXIT', 'ENTRY', 'EXIT', 'P&L', 'RETURN', 'HOLD', 'EXIT CHECK'].map((s) => text.indexOf(s));
+    const idx = ['SYMBOL', 'CONTRACT', 'QTY · ENTRY → EXIT', 'ENTRY', 'EXIT', 'P&L', 'RETURN', 'HOLD', 'EXIT CHECK', 'EXIT REASON'].map((s) => text.indexOf(s));
     expect([...idx].sort((a, b) => a - b)).toEqual(idx);
     expect(idx.every((i) => i >= 0)).toBe(true);
     const r = within(screen.getAllByTestId('history-row')[0]);
     expect(r.getByRole('button', { name: 'Remove AAA from history' })).toBeInTheDocument();
+    expect(screen.getByTestId('history-exitcheck-header')).toHaveAttribute('title', expect.stringContaining('stored when each trade was closed'));
     expect(screen.getByTestId('history-exitcheck-header')).toHaveAttribute('title', expect.stringContaining('global premium stop (60%)'));
   });
 

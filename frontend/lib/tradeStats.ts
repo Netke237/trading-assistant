@@ -27,9 +27,12 @@
  *                  API reports 0.0 for a zero-cost entry; that is not a real 0.0%)
  *   pastStop     = { n: option losses past the stop, of: option losses checkable }
  *
- * EXIT-RECORD EXTENSION POINT (#664): `exitCheck` takes the stop as an argument.
- * Today callers pass the global `premiumStopPct`; once the stop in force at
- * entry is stored, #664 passes that per-trade value instead, with no change here.
+ * EXIT RECORD (#664): `exitCheck` takes the stop as an argument and is
+ * unchanged. Callers pass `stopPctFor(h, globalPct).pct`: the premium stop
+ * snapshotted on the row when it was closed (`premiumStopPctAtClose`), or,
+ * for rows closed before that was recorded (null / absent), today's global
+ * `premiumStopPct`. `computeTradeStats` does the same per row, so `pastStop`
+ * follows the stored stops. The snapshot is taken at close, not at entry.
  */
 
 import type { ClosedPosition } from './performanceStore';
@@ -136,7 +139,20 @@ export function exitCheck(h: ClosedPosition, stopPct: number): ExitCheck {
   return { kind: 'within-stop', label: 'Within premium stop' };
 }
 
-export function computeTradeStats(rows: readonly ClosedPosition[], stopPct: number): TradeStats {
+export type StopSource = 'stored' | 'global';
+
+/** The premium stop to judge a closed row against: the one stored at close
+ *  when recorded (a number), otherwise the caller's global stop. */
+export function stopPctFor(h: ClosedPosition, globalPct: number): { pct: number; source: StopSource } {
+  const stored = h.premiumStopPctAtClose;
+  return typeof stored === 'number'
+    ? { pct: stored, source: 'stored' }
+    : { pct: globalPct, source: 'global' };
+}
+
+/** `globalPct` is today's global premium stop; each row is checked against
+ *  `stopPctFor(row, globalPct).pct`. */
+export function computeTradeStats(rows: readonly ClosedPosition[], globalPct: number): TradeStats {
   const trades = rows.filter((r) => Number.isFinite(r.realizedPnlDollar));
   const skipped = rows.length - trades.length;
   let wins = 0, losses = 0, flats = 0, grossWon = 0, grossLost = 0, total = 0;
@@ -148,7 +164,7 @@ export function computeTradeStats(rows: readonly ClosedPosition[], stopPct: numb
     if (cls === 'win') { wins += 1; grossWon += t.realizedPnlDollar; }
     else if (cls === 'loss') {
       losses += 1; grossLost += Math.abs(t.realizedPnlDollar);
-      const ec = exitCheck(t, stopPct);
+      const ec = exitCheck(t, stopPctFor(t, globalPct).pct);
       if (ec.kind === 'past-stop') { pastN += 1; pastOf += 1; }
       else if (ec.kind === 'within-stop') pastOf += 1;
     } else flats += 1;

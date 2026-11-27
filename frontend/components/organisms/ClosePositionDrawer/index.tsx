@@ -8,6 +8,8 @@
  * - Realized P&L preview updates live.
  * - "Also send to broker" is intentionally DISABLED (coming soon), mirroring
  *   the Step 7 Send-basket-to-broker feature that is wired but not yet live.
+ * - Exit reason (PORTFOLIO-EXIT-RECORD): required, pre-selected once on open
+ *   from defaultExitReason, always editable.
  */
 
 import { useState } from 'react';
@@ -15,24 +17,32 @@ import { Text, Data } from '@/components/primitives';
 import type { PortfolioPosition } from '@/types/domain';
 import { positionMultiplier } from '@/lib/risk';
 import { formatMoney, formatSignedPct, readableContract } from '@/lib/portfolioFormat';
+import { EXIT_REASONS, exitReasonLabel, defaultExitReason, type ExitReason } from '@/lib/exitReason';
 import styles from './ClosePositionDrawer.module.css';
 
 interface Props {
   position: PortfolioPosition;
+  /** Global premium stop fraction, for the pre-selected exit reason. */
+  premiumStopPct: number;
   onCancel: () => void;
-  onConfirm: (opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => void;
+  onConfirm: (opts: { qtyToClose: number; exitPrice: number; exitDate: string; exitReason: ExitReason }) => void;
 }
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
+export function ClosePositionDrawer({ position, premiumStopPct, onCancel, onConfirm }: Props) {
   const held = position.contracts ?? 1;
   // null until the user edits the quantity: a full close stays full.
   const [qtyInput, setQty] = useState<number | null>(null);
   const [exitPrice, setExitPrice] = useState<number>(position.currentPrice || position.entryPrice);
   const [exitDate, setExitDate] = useState<string>(todayIso());
+  // Computed once on open: a sync poll moving the row must not overwrite the
+  // pre-selection (or the user's own pick) under an open dialog.
+  const [exitReason, setExitReason] = useState<ExitReason>(
+    () => defaultExitReason(position, { premiumStopPct, exitDate: todayIso() }),
+  );
   // The row can change under an open dialog (a close-404 re-save, a resized
   // qty edit, a sync poll), so the quantity is derived from what is held NOW
   // on every render -- never a stale size beside '(of N)' (open question 54,
@@ -93,6 +103,21 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
           />
         </label>
 
+        <label className={styles.field}>
+          <Text size={11} tone="secondary" weight={400}>Reason</Text>
+          <select
+            className={styles.input}
+            value={exitReason}
+            required
+            onChange={(e) => setExitReason(e.target.value as ExitReason)}
+            aria-label="Exit reason"
+          >
+            {EXIT_REASONS.map((r) => (
+              <option key={r} value={r}>{exitReasonLabel(r)}</option>
+            ))}
+          </select>
+        </label>
+
         <div className={styles.field}>
           <Text size={11} tone="secondary">Realized P&L</Text>
           <Data size={16} weight={500} tone={tone}>
@@ -112,7 +137,7 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
         <button
           type="button"
           className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={() => onConfirm({ qtyToClose: qty, exitPrice, exitDate })}
+          onClick={() => onConfirm({ qtyToClose: qty, exitPrice, exitDate, exitReason })}
         >
           {qty >= held ? 'Close position' : `Sell ${qty} of ${held}`}
         </button>
