@@ -17,6 +17,9 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
 import { BrokerAttemptPanel } from '@/components/organisms/BrokerAttemptPanel';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
+import { ActionNeededList } from '@/components/organisms/ActionNeededList';
+import { buildActionItems, type EpisodesInput } from '@/lib/actionNeeded';
+import { useAlertEpisodesStore } from '@/lib/alertEpisodesStore';
 import { exitReasonLabel, type ExitReason } from '@/lib/exitReason';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -39,7 +42,7 @@ import { EditDrawer } from './EditDrawer';
 import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
 import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAtStopTotal } from '@/lib/portfolioTotals';
-import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
+import { formatMoney, formatSignedPct, readableContract, moneyTone } from '@/lib/portfolioFormat';
 import {
   computeTradeStats, filterTrades, sortTrades, exitCheck, stopPctFor, holdDays, returnPct, tradeLabel,
   targetThenLoss,
@@ -54,12 +57,6 @@ function localIsoDate(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-/** `−5.2%` / `+9.6%`, one decimal, Unicode minus. */
-function formatBreachPct(v: number): string {
-  const s = Math.abs(v).toFixed(1);
-  return Number(v.toFixed(1)) < 0 ? `${MINUS}${s}%` : `+${s}%`;
 }
 
 // Existing columns first; RETURN, HOLD, EXIT CHECK, EXIT REASON sit between P&L and the remove button.
@@ -270,26 +267,24 @@ export default function PortfolioPage() {
   const { thetaDollars } = aggregateGreeks(positions);
   const riskTotal = riskAtStopTotal(positions);
 
-  // Stop-breach banners, derived each render: one per row whose derived breach
-  // is the underlying stop or the structural stop. breachPct is
-  // (underlying - level) / underlying, the OPPOSITE sign of positionRange.stopPct.
-  const breachBanners = positions.flatMap((p) => {
-    const { breach } = derivePositionStatus(p, { premiumStopPct });
-    if (breach !== 'stop' && breach !== 'structural') return [];
-    const underlying = p.contract.endsWith('|STOCK') ? p.currentPrice : (p.currentStockPrice ?? 0);
-    const level = breach === 'stop' ? p.stop : p.structuralStop;
-    if (level == null || !(underlying > 0)) return [];
-    const pct = ((underlying - level) / underlying) * 100;
-    const label = breach === 'stop' ? 'stop' : 'structural stop';
-    const text =
-      `${p.symbol} ${readableContract(p.contract)}: ${label} breached. ` +
-      `Underlying ${formatMoney(underlying, { decimals: 2 })} is ${p.direction === 'Bearish' ? 'above' : 'below'} ` +
-      `your ${label} ${formatMoney(level, { decimals: 2 })} (${formatBreachPct(pct)}).` +
-      (p.quoteUnavailable === true && !p.contract.endsWith('|STOCK')
-        ? ' The option has had no quote since the last sync, so its P&L and risk are unknown.'
-        : '');
-    return [{ contract: p.contract, symbol: p.symbol, text }];
-  });
+  // "Action needed" (PORTFOLIO-ALERT-ACTION #672), derived each render. It
+  // replaces the stop-breach banners in their place and keeps their sentence
+  // (lib/actionNeeded.ts stopBreachSentence). No clock yet (server pass, first
+  // hydrated render) or no answer yet: no duration is claimed.
+  const episodesByKey = useAlertEpisodesStore((s) => s.episodes);
+  const episodesGapHours = useAlertEpisodesStore((s) => s.gapHours);
+  const episodesError = useAlertEpisodesStore((s) => s.error);
+  const refreshEpisodes = useAlertEpisodesStore((s) => s.refresh);
+  useEffect(() => {
+    void refreshEpisodes();
+    const id = setInterval(() => { void refreshEpisodes(); }, 60_000);
+    return () => clearInterval(id);
+  }, [refreshEpisodes]);
+  const episodesInput: EpisodesInput =
+    episodesError !== null ? { status: 'failed' }
+      : now === null || episodesByKey === null ? { status: 'pending' }
+        : { status: 'loaded', byKey: episodesByKey, gapHours: episodesGapHours };
+  const actionItems = buildActionItems(positions, episodesInput, { premiumStopPct, now: now ?? new Date(0) });
 
   // Clock-derived labels come from effect-set state only: on the server pass
   // and the first client render `now` is null and no period text is rendered,
@@ -382,23 +377,11 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {breachBanners.map((b) => (
-        <div key={b.contract} role="alert" className={styles.breachBanner}>
-          <Text size={13} tone="reject">{b.text}</Text>
-          <div className={styles.breachActions}>
-            <button
-              type="button"
-              className={styles.breachBtn}
-              onClick={() => { setTab('open'); setEditing(b.contract); setSelectedSymbol(b.symbol); }}
-            >
-              {`Review ${b.symbol}`}
-            </button>
-            <button type="button" className={styles.breachBtn} onClick={() => setClosing(b.contract)}>
-              Close position…
-            </button>
-          </div>
-        </div>
-      ))}
+      <ActionNeededList
+        items={actionItems}
+        onReview={(item) => { setTab('open'); setEditing(item.contract); setSelectedSymbol(item.symbol); }}
+        onClose={(item) => { setTab('open'); setClosing(item.contract); }}
+      />
 
       <div className={styles.tabs} role="tablist" aria-label="Portfolio views">
         <button

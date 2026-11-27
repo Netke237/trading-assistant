@@ -1100,6 +1100,58 @@ export async function clearAllHistory(): Promise<void> {
   await del('/api/portfolio/history');
 }
 
+/* ---------- Position alert episodes (PORTFOLIO-ALERT-ACTION, #672) ---------- */
+
+/** One episode of one `(recId, alertType)` key — backend `AlertEpisodeItem`. */
+export interface AlertEpisode {
+  recId: string;
+  symbol: string;
+  alertType: string;
+  /** ISO, UTC. When `startTruncated` this is only the earliest KNOWN fire. */
+  startedAt: string;
+  lastFiredAt: string;
+  fireCount: number;
+  /** True → an earlier fire may have been pruned: render "N+ days" /
+   *  "since before <date>", never an exact date or count. */
+  startTruncated: boolean;
+}
+
+/** `GET /api/alerts/episodes` — current episodes for open positions. */
+export interface AlertEpisodesResponse {
+  gapHours: number;
+  retentionDays: number;
+  generatedAt: string;
+  episodes: AlertEpisode[];
+}
+
+export interface AlertHistoryRow {
+  alertType: string;
+  source: string;
+  price: number | null;
+  referenceValue: number | null;
+  referenceKind: string | null;
+  note: string | null;
+  triggeredAt: string | null;
+}
+
+/** `GET /api/alerts/history/{rec_id}` — one open position's alert log. */
+export interface AlertHistoryResponse {
+  recId: string;
+  symbol: string;
+  rows: AlertHistoryRow[];
+  episodes: AlertEpisode[];
+}
+
+/** Throws on failure; callers handle it. */
+export async function fetchAlertEpisodes(): Promise<AlertEpisodesResponse> {
+  return get<AlertEpisodesResponse>('/api/alerts/episodes');
+}
+
+/** Throws on failure (404 when `recId` is not an open position). */
+export async function fetchAlertHistory(recId: string): Promise<AlertHistoryResponse> {
+  return get<AlertHistoryResponse>(`/api/alerts/history/${encodeURIComponent(recId)}`);
+}
+
 /* ---------- Ingestion schedule ---------- */
 
 export interface IngestionSchedule {
