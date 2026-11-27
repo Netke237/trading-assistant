@@ -20,7 +20,12 @@ from app.schemas import (
     AlertItem,
 )
 from app.services import alert_episodes
-from app.services.alert_generator import POSITION_ALERT_TYPES, effective_enabled, generate_alerts
+from app.services.alert_generator import (
+    POSITION_ALERT_TYPES,
+    effective_enabled,
+    generate_alerts,
+    stamp_target_first_hit,
+)
 from app.services.notifications.alert_notifier import notify_alert
 from app.services.position_alert_log import log_position_alert
 from app.services.premium_stop import premium_stop_side
@@ -243,6 +248,10 @@ async def post_alert_notify(
         contract=position.contract,
         note=req.note,
     )
+    # PORTFOLIO-ALERT-ACTION: the first TP_HIT stamps target_first_hit_at on
+    # this open position (never overwritten; see stamp_target_first_hit).
+    if req.alertType == 'TP_HIT':
+        await stamp_target_first_hit(db, req.recId, datetime.now(timezone.utc))
     # log_position_alert no longer commits the (shared, request-scoped) session
     # itself — see its docstring — so this endpoint owns the final commit.
     await db.commit()

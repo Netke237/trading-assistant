@@ -649,6 +649,9 @@ async def close_position(
         structural_stop_at_close=position.structural_stop,
         premium_stop_pct_at_close=stop_pct_at_close,
         premium_stop_price_at_close=stop_price_at_close,
+        # PORTFOLIO-ALERT-ACTION: when the target was first reached, from the
+        # locked re-read position (every partial close copies it too).
+        target_first_hit_at=position.target_first_hit_at,
     )
     db.add(closed)
     await db.flush()

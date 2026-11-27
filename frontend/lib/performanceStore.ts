@@ -24,6 +24,10 @@ export interface ClosedPosition {
   /** Fraction (0.6 = 60%), as stored. */
   premiumStopPctAtClose?: number | null;
   premiumStopPriceAtClose?: number | null;
+  /** PORTFOLIO-ALERT-ACTION: when the target was first reached (ISO 8601 UTC with
+   *  offset), copied from the open position at close. Null = never reached, or
+   *  no surviving alert history when the column was back-filled. */
+  targetFirstHitAt?: string | null;
 }
 
 export interface PerfPoint { date: string; value: number }
@@ -78,7 +82,15 @@ export const usePerformanceStore = create<PerfState>((set, get) => ({
   fetchHistory: async () => {
     try {
       const res = await fetch(`${BASE()}/api/portfolio/history`);
-      if (res.ok) set({ history: await res.json() });
+      if (!res.ok) return;
+      const raw = await res.json();
+      const history: ClosedPosition[] = Array.isArray(raw)
+        ? raw.map((h: ClosedPosition) => ({
+            ...h,
+            targetFirstHitAt: typeof h?.targetFirstHitAt === 'string' ? h.targetFirstHitAt : null,
+          }))
+        : raw;
+      set({ history });
     } catch { /* backend offline */ }
   },
   fetchPerformance: async () => {

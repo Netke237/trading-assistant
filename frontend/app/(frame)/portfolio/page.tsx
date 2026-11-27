@@ -42,9 +42,19 @@ import { openTotals, unquotedNote, aggregateGreeks, positionThetaDollars, riskAt
 import { formatMoney, formatSignedPct, readableContract, moneyTone, MINUS } from '@/lib/portfolioFormat';
 import {
   computeTradeStats, filterTrades, sortTrades, exitCheck, stopPctFor, holdDays, returnPct, tradeLabel,
+  targetThenLoss,
   type TradeFilter, type SortKey, type SortDir,
 } from '@/lib/tradeStats';
 import { TradeStatsStrip, stopTooltip, rowStopTooltip } from './TradeStatsStrip';
+
+/** Local calendar date (`YYYY-MM-DD`) of an ISO timestamp, for the History
+ *  target-then-loss tooltip; the raw string when it does not parse. */
+function localIsoDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 /** `−5.2%` / `+9.6%`, one decimal, Unicode minus. */
 function formatBreachPct(v: number): string {
@@ -555,6 +565,15 @@ export default function PortfolioPage() {
               </span>
               <span data-testid="history-exitcheck" title={rowStopTooltip(stop)}>
                 <Text size={11} tone={ec.kind === 'past-stop' ? 'reject' : ec.kind === 'within-stop' ? 'caution' : 'secondary'}>{ec.label}</Text>
+                {targetThenLoss(h) && (
+                  <span
+                    data-testid="history-target-flag"
+                    title={`Target first reached ${localIsoDate(h.targetFirstHitAt as string)}`}
+                    style={{ display: 'block' }}
+                  >
+                    <Text size={11} tone="reject">Reached target, closed at a loss</Text>
+                  </span>
+                )}
               </span>
               <span data-testid="history-exitreason">
                 <Text size={11} tone="secondary">{exitReasonLabel(h.exitReason)}</Text>

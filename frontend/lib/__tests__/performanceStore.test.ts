@@ -131,3 +131,27 @@ describe('performanceStore sync-state fields', () => {
     expect(p.snapshotSkippedContracts).toEqual([]);
   });
 });
+
+describe('performanceStore history: targetFirstHitAt (PORTFOLIO-ALERT-ACTION)', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; jest.restoreAllMocks(); });
+
+  const base = {
+    id: 'h1', recId: 'r1', symbol: 'FTNT', contract: 'FTNT|100|2027-01-15|C', direction: 'Bullish',
+    entryPrice: 2, entryDate: '2026-10-01', exitPrice: 1, exitDate: '2026-11-01', qtyClosed: 1,
+    realizedPnlDollar: -100, realizedPnlPct: -50, closedAt: '2026-11-01T15:00:00+00:00',
+  };
+
+  it('keeps the stamp and reads an absent or non-string value as null', async () => {
+    global.fetch = jest.fn().mockResolvedValue(jsonRes([
+      { ...base, id: 'a', targetFirstHitAt: '2026-10-20T14:30:00+00:00' },
+      { ...base, id: 'b', targetFirstHitAt: null },
+      { ...base, id: 'c' },
+      { ...base, id: 'd', targetFirstHitAt: 12 },
+    ])) as unknown as typeof fetch;
+    await usePerformanceStore.getState().fetchHistory();
+    const h = usePerformanceStore.getState().history;
+    expect(h.map((r) => r.targetFirstHitAt)).toEqual(['2026-10-20T14:30:00+00:00', null, null, null]);
+    expect(h[0]).toMatchObject({ ...base, id: 'a' });
+  });
+});

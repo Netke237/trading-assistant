@@ -33,6 +33,11 @@
  * for rows closed before that was recorded (null / absent), today's global
  * `premiumStopPct`. `computeTradeStats` does the same per row, so `pastStop`
  * follows the stored stops. The snapshot is taken at close, not at entry.
+ *
+ * TARGET THEN LOSS (PORTFOLIO-ALERT-ACTION): `targetThenLoss` = the row carries
+ * a `targetFirstHitAt` stamp (the target was reached while the position was
+ * open) and `realizedPnlDollar < 0`. A per-position TP_HIT mute means no fire,
+ * so no stamp and no flag.
  */
 
 import type { ClosedPosition } from './performanceStore';
@@ -137,6 +142,11 @@ export function exitCheck(h: ClosedPosition, stopPct: number): ExitCheck {
     return { kind: 'past-stop', lossPct, label: `Lost ${l}%: past ${s}% premium stop` };
   }
   return { kind: 'within-stop', label: 'Within premium stop' };
+}
+
+/** The target was reached while open, and the trade still closed at a loss. */
+export function targetThenLoss(h: ClosedPosition): boolean {
+  return h.targetFirstHitAt != null && h.realizedPnlDollar < 0;
 }
 
 export type StopSource = 'stored' | 'global';

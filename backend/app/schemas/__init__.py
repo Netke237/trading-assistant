@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.schemas.payload_depth import validate_payload_depth
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional, Union
 from pydantic import (
@@ -1606,6 +1606,15 @@ class ClosePositionRequest(BaseModel):
     exitReason: Optional[CloseExitReason] = None
 
 
+def _iso_utc_or_none(value: Optional[datetime]) -> Optional[str]:
+    """ISO 8601 with an explicit UTC offset; SQLite reads DateTime back naive (stored UTC)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 class ClosedPositionSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
     id: str
@@ -1627,6 +1636,9 @@ class ClosedPositionSchema(BaseModel):
     structuralStopAtClose: Optional[float] = None
     premiumStopPctAtClose: Optional[float] = None
     premiumStopPriceAtClose: Optional[float] = None
+    # PORTFOLIO-ALERT-ACTION: when the target was first reached (ISO 8601 UTC
+    # with offset); None = never reached or not recorded.
+    targetFirstHitAt: Optional[str] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "ClosedPositionSchema":
@@ -1649,6 +1661,7 @@ class ClosedPositionSchema(BaseModel):
             structuralStopAtClose=obj.structural_stop_at_close,
             premiumStopPctAtClose=obj.premium_stop_pct_at_close,
             premiumStopPriceAtClose=obj.premium_stop_price_at_close,
+            targetFirstHitAt=_iso_utc_or_none(getattr(obj, "target_first_hit_at", None)),
         )
 
 

@@ -32,6 +32,10 @@ class ClosedPositionModel(Base):
     structural_stop_at_close = Column(Float, nullable=True)
     premium_stop_pct_at_close = Column(Float, nullable=True)
     premium_stop_price_at_close = Column(Float, nullable=True)
+    # PORTFOLIO-ALERT-ACTION: when the position's target was first reached
+    # (first TP_HIT fire), copied from the locked open position at this close.
+    # NULL = never reached (or no surviving history at migration time).
+    target_first_hit_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class EquitySnapshotModel(Base):

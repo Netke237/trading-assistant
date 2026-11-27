@@ -65,6 +65,18 @@ def _create_closed_positions(db):
         " realized_pnl_pct FLOAT NOT NULL, source VARCHAR, closed_at DATETIME)")
 
 
+def _create_alert_action_tables(db):
+    # The columns of portfolio_positions and position_alert_history that the
+    # PORTFOLIO-ALERT-ACTION target_first_hit_at revision reads and alters.
+    db.execute(
+        "CREATE TABLE portfolio_positions ("
+        " id VARCHAR(36) NOT NULL PRIMARY KEY, rec_id VARCHAR NOT NULL)")
+    db.execute(
+        "CREATE TABLE position_alert_history ("
+        " id VARCHAR(36) NOT NULL PRIMARY KEY, rec_id VARCHAR NOT NULL,"
+        " alert_type VARCHAR NOT NULL, triggered_at DATETIME)")
+
+
 OLD_ROW = ("TEST", "2016-01-01", "2016-01-04", "tiingo", "2026-10-14 01:00:00",
            "2020-10-12", "tiingo", "abc123")
 OLD_COLUMNS = ["symbol", "floor_requested_start", "floor_date", "floor_provider",
@@ -117,6 +129,7 @@ def test_upgrade_from_main_head_adds_basis_columns(tmp_path):
     with sqlite3.connect(path) as db:
         _create_history_state(db)
         _create_closed_positions(db)
+        _create_alert_action_tables(db)
     alembic = _alembic_runner(path)
     alembic("stamp", MAIN_HEAD)
     alembic("upgrade", "head")
