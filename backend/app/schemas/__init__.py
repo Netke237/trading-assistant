@@ -530,6 +530,46 @@ class AlertItem(BaseModel):
     stopSide: Optional[str] = None
 
 
+# ── Alert episodes / history (PORTFOLIO-ALERT-ACTION, #672) ─────────────────
+# Read-only views over position_alert_history; see services/alert_episodes.py.
+# Every timestamp is an ISO-8601 UTC string WITH offset ("+00:00").
+
+class AlertEpisodeItem(BaseModel):
+    recId: str
+    symbol: str
+    alertType: str
+    startedAt: str
+    lastFiredAt: str
+    fireCount: int
+    # True → startedAt is only the earliest KNOWN fire (an earlier one may have
+    # been pruned): show "since before <date>" / "N+ days", never an exact count.
+    startTruncated: bool
+
+
+class AlertEpisodesResponse(BaseModel):
+    gapHours: float
+    retentionDays: int
+    generatedAt: str
+    episodes: list[AlertEpisodeItem]
+
+
+class AlertHistoryRow(BaseModel):
+    alertType: str
+    source: str
+    price: Optional[float] = None
+    referenceValue: Optional[float] = None
+    referenceKind: Optional[str] = None
+    note: Optional[str] = None
+    triggeredAt: Optional[str] = None
+
+
+class AlertHistoryResponse(BaseModel):
+    recId: str
+    symbol: str
+    rows: list[AlertHistoryRow]
+    episodes: list[AlertEpisodeItem]
+
+
 # ── Events ───────────────────────────────────────────────────────────────────
 
 class UpcomingEvent(BaseModel):
