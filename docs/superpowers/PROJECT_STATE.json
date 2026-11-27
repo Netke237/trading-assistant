@@ -11773,12 +11773,12 @@
     {
       "id": "PORTFOLIO-EXIT-RECORD",
       "name": "Store exit reason and the stop snapshot at close for each closed trade; History exit check uses the stored stop (#664)",
-      "status": "in_progress",
+      "status": "built",
       "tracking_issue": 664,
       "branch": "board/portfolio-exit-record-878aec62",
       "size": "L",
       "complexity": 4,
-      "completion_pct": 20,
+      "completion_pct": 75,
       "plan": "docs/superpowers/plans/2026-11-26-portfolio-exit-record-plan.md",
       "audit_rounds": 2,
       "audit_clean": false,
@@ -11789,7 +11789,7 @@
         "pattern": "exit_reason = Column",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-26 taken by board worker; plan drafted at 777f78a6. Plan round 1 (fresh gate-auditor a02c371e13ae34c42): 1 gate finding - stocks also have a percent (premium) stop, plan stored NULL for stock rows; fixed at 379fd002 (snapshot pct for all rows, price via percent_stop_threshold_price with short-stock side). Plan round 2 (fresh gate-auditor a854eb2a720f9652a) on 777f78a6..379fd002: 0 gate findings - plan clean. Tickets next.",
+      "note": "2026-11-26 taken by board worker; plan drafted at 777f78a6. Plan round 1 (fresh gate-auditor a02c371e13ae34c42): 1 gate finding - stocks also have a percent (premium) stop, plan stored NULL for stock rows; fixed at 379fd002 (snapshot pct for all rows, price via percent_stop_threshold_price with short-stock side). Plan round 2 (fresh gate-auditor a854eb2a720f9652a) on 777f78a6..379fd002: 0 gate findings - plan clean. Tickets #701 (6775d98e, c4084a44), #702 (10417acc), #703 (bc34873f) built, coordinator-verified and closed. Postgres migration test passed against a throwaway postgres:15 container (removed). origin/main already merged (up to date at 88b157ed). Code audit round 1 pending.",
       "plan_stage": {
         "rounds": 2,
         "clean": true,
