@@ -11815,7 +11815,7 @@
       "complexity": 4,
       "completion_pct": 10,
       "plan": "docs/superpowers/plans/2026-11-27-portfolio-alert-action-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": false,
       "verify": {
@@ -11824,10 +11824,12 @@
         "pattern": "def split_episodes",
         "note": "Presence only; not proof of behaviour, audit or merge."
       },
-      "note": "2026-11-27 taken by board worker. Point 4 (automatic exit / any order placement) PARKED by Kenneth's decision in chat 2026-11-27: out of scope, not built, not a needs-kenneth question. Plan drafted; plan audit pending.",
+      "note": "2026-11-27 taken by board worker. Point 4 (automatic exit / any order placement) PARKED by Kenneth's decision in chat 2026-11-27: out of scope, not built, not a needs-kenneth question. Plan drafted; plan audit pending. Plan round 1 (fresh gate-auditor aa44e11e52f7873a2) on plan @0db8aa82: 4 gate findings - (1) notifier start would move forward as history is pruned, freezing 'Active for 30 days' and wrong trigger date; (2) truncated episodes would show a wrong 'since' date; (3) daily summary 'success' did not detect swallowed quote failures; (4) alertStore episodes not in partialize/merge, wiped on every hydration. All fixed in plan at 3065e327.",
       "plan_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": false,
+        "reviewer": "fresh gate-auditor aa44e11e52f7873a2 (round 1)",
+        "reviewed": "plan @0db8aa82"
       },
       "code_stage": {
         "rounds": 0,
