@@ -3,6 +3,12 @@
 Covers: master/type gating, dedup within the window, and the reminder behaviour
 (original trigger timestamp preserved, '(reminder)' tag + 'Still active' line,
 and reset on position close via forget_alerts).
+
+PORTFOLIO-ALERT-ACTION T2: the position types (POSITION_ALERT_TYPES) now
+follow the episode cadence (first fire + one reminder per 24 h, see
+test_alert_escalation.py). Tests here that pin the reminderIntervalHours
+WINDOW use REGIME_CHANGE (rec_id 'regime'), which keeps that path; tests that
+need a position-type reminder advance the episode clock (`an._now`) by 24 h.
 """
 from __future__ import annotations
 
@@ -40,11 +46,11 @@ def captured(monkeypatch):
     """Reset notifier state, capture dispatched notifications, never hit channels."""
     an._fired.clear()
     an._first_seen.clear()
-    # window 0 → second send for the same key is treated as a due reminder
+    # window 0 → second send for the same WINDOW-path key is a due reminder
     monkeypatch.setattr(an, '_MIN_DEDUP_SECONDS', 0)
     monkeypatch.setattr(
         an, '_load_delivery_config',
-        lambda: {'masterEnabled': True, 'enabledTypes': ['STOP_REACHED'],
+        lambda: {'masterEnabled': True, 'enabledTypes': ['STOP_REACHED', 'REGIME_CHANGE'],
                  'reminderIntervalHours': 0},
     )
     sent: list[tuple[str, str, str]] = []
@@ -55,6 +61,14 @@ def captured(monkeypatch):
 
     monkeypatch.setattr(an, 'notify_enabled_channels', _fake_notify)
     return sent
+
+
+@pytest.fixture
+def episode_clock(monkeypatch):
+    """Settable wall clock for the episode path (position alert types)."""
+    state = {'now': 1_800_000_000.0}
+    monkeypatch.setattr(an, '_now', lambda: state['now'])
+    return state
 
 
 async def test_master_disabled_suppresses(captured, monkeypatch):
@@ -75,11 +89,11 @@ async def test_dedup_within_window_suppresses_second(captured, monkeypatch):
     monkeypatch.setattr(an, '_MIN_DEDUP_SECONDS', 3600)
     monkeypatch.setattr(
         an, '_load_delivery_config',
-        lambda: {'masterEnabled': True, 'enabledTypes': ['STOP_REACHED'],
+        lambda: {'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE'],
                  'reminderIntervalHours': 4},
     )
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS) is True
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS) is False
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', _TS) is True
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', _TS) is False
     assert len(captured) == 1
 
 
@@ -96,7 +110,7 @@ async def test_failed_delivery_does_not_permanently_suppress_retries(monkeypatch
     monkeypatch.setattr(an, '_MIN_DEDUP_SECONDS', 3600)  # large window
     monkeypatch.setattr(
         an, '_load_delivery_config',
-        lambda: {'masterEnabled': True, 'enabledTypes': ['STOP_REACHED'],
+        lambda: {'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE'],
                  'reminderIntervalHours': 4},
     )
 
@@ -106,21 +120,22 @@ async def test_failed_delivery_does_not_permanently_suppress_retries(monkeypatch
     monkeypatch.setattr(an, 'notify_enabled_channels', _fake_notify_fails)
 
     # A failed attempt reports False...
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS) is False
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', _TS) is False
     # ...and does NOT arm the dedup window — the very next check retries.
-    assert 'rec-1|STOP_REACHED' not in an._fired
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS) is False
+    assert 'regime|REGIME_CHANGE' not in an._fired
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', _TS) is False
 
 
 async def test_successful_delivery_after_prior_failure_arms_dedup(monkeypatch):
     """Once delivery actually succeeds, the dedup window IS armed as normal —
-    only a failed send should leave the key unmarked."""
+    only a failed send should leave the key unmarked. (Window path: REGIME_CHANGE;
+    a position type's hold is its episode record, test_alert_escalation.py.)"""
     import app.services.notifications.alert_notifier as an
     an._fired.clear(); an._first_seen.clear()
     monkeypatch.setattr(an, '_MIN_DEDUP_SECONDS', 3600)
     monkeypatch.setattr(
         an, '_load_delivery_config',
-        lambda: {'masterEnabled': True, 'enabledTypes': ['STOP_REACHED'],
+        lambda: {'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE'],
                  'reminderIntervalHours': 4},
     )
     sent = []
@@ -131,10 +146,10 @@ async def test_successful_delivery_after_prior_failure_arms_dedup(monkeypatch):
 
     monkeypatch.setattr(an, 'notify_enabled_channels', _fake_notify_succeeds)
 
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS) is True
-    assert 'rec-1|STOP_REACHED' in an._fired
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', _TS) is True
+    assert 'regime|REGIME_CHANGE' in an._fired
     # A second call within the window is now correctly deduped.
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS) is False
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', _TS) is False
     assert len(sent) == 1
 
 
@@ -145,9 +160,10 @@ async def test_first_send_is_not_tagged_reminder(captured):
     assert 'Still active as of' not in plain
 
 
-async def test_reminder_preserves_original_timestamp(captured):
-    # First trigger, then a later reminder with a DIFFERENT timestamp passed in.
+async def test_reminder_preserves_original_timestamp(captured, episode_clock):
+    # First trigger, then a reminder 24 h later with a DIFFERENT timestamp passed in.
     assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'Stop breached', 'rec-1', _TS) is True
+    episode_clock['now'] += 24 * 3600
     assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'Stop breached', 'rec-1',
                            '2026-05-31T11:30:00+00:00') is True
 
@@ -174,11 +190,12 @@ async def test_forget_alerts_resets_first_seen(captured):
 
 
 async def test_first_send_with_none_timestamp_falls_back_and_reminder_reuses_it(captured):
-    # No timestamp on first send → falls back to 'now' and is stored.
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', None) is True
+    # Window path (REGIME_CHANGE). No timestamp on first send → falls back to
+    # 'now' and is stored.
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', None) is True
     first_time = _time_line(captured[0][1])
     # Reminder reuses that stored fallback time.
-    assert await an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', None) is True
+    assert await an.notify_alert('MARKET', 'REGIME_CHANGE', 'x', 'regime', None) is True
     assert _time_line(captured[1][1]) == first_time
     assert '(reminder)' in captured[1][0]
 
@@ -248,21 +265,23 @@ async def test_telegram_mirrors_email_and_shows_cet(captured):
     assert 'CLX' in html
 
 
-async def test_reminder_telegram_headline_keeps_portfolio_prefix(captured):
+async def test_reminder_telegram_headline_keeps_portfolio_prefix(captured, episode_clock):
     await an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79', 'rec-1', _TS)
+    episode_clock['now'] += 24 * 3600
     await an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79', 'rec-1', _TS)
     _subject, _plain, html = captured[1]
     assert html.startswith('<b>Portfolio: CLX — Stop hit</b>')
     assert 'Still active as of' in html
 
 
-async def test_telegram_html_body_is_telegram_safe(captured):
+async def test_telegram_html_body_is_telegram_safe(captured, episode_clock):
     # Regression test for a real shipped bug: the html body once used <br> for
     # line breaks (both here and on a reminder line), which Telegram's HTML
     # parse_mode rejects outright -- the alert would silently fail to send over
     # Telegram while the email looked fine.
     assert await an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79',
                            'rec-1', _TS) is True
+    episode_clock['now'] += 24 * 3600
     assert await an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79',
                            'rec-1', _TS) is True  # second call -> reminder line included
     for _subject, _plain, html in captured:
@@ -390,14 +409,15 @@ async def test_short_fire_ignores_legacy_fall_side_dedup_state(premium_captured)
     assert '(reminder)' not in subject
     assert 'Stock stop hit (short)' in subject
     assert '01.01.2026' not in plain
-    assert 'rec-1|PREMIUM_STOP:short' in an._fired
+    # T2: position types keep their state in the episode map, same short key.
+    assert 'rec-1|PREMIUM_STOP:short' in an._episodes
 
 
 async def test_legacy_and_unstamped_fires_keep_the_legacy_key(premium_captured):
     assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-1', _TS) is True
     assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-2', _TS,
                                  stop_side='option') is True
-    assert set(an._fired) == {'rec-1|PREMIUM_STOP', 'rec-2|PREMIUM_STOP'}
+    assert set(an._episodes) == {'rec-1|PREMIUM_STOP', 'rec-2|PREMIUM_STOP'}
 
 
 async def test_short_key_survives_a_save_and_reload(premium_captured, monkeypatch, tmp_path):
@@ -406,9 +426,10 @@ async def test_short_key_survives_a_save_and_reload(premium_captured, monkeypatc
                                  stop_side='short-stock') is True
     an._fired.clear()
     an._first_seen.clear()
+    an._episodes.clear()
     an._load_dedup()
-    assert 'rec-1|PREMIUM_STOP:short' in an._fired
-    # ...and so a second fire inside the window stays deduped across a restart.
+    assert 'rec-1|PREMIUM_STOP:short' in an._episodes
+    # ...and so a second fire the same day stays deduped across a restart.
     assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-1', _TS,
                                  stop_side='short-stock') is False
 

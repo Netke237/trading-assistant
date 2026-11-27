@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -13,9 +14,18 @@ from app.database import AsyncSessionLocal
 from app.models.portfolio import PortfolioPositionModel
 from app.routers.regime import compute_overall_regime
 from app.schemas import AlertItem
-from app.services.alert_generator import effective_enabled, generate_alerts
+from app.services.alert_episodes import EpisodeStart, current_episodes
+from app.services.alert_generator import POSITION_ALERT_TYPES, effective_enabled, generate_alerts
 from app.services.alert_service import alert_service
-from app.services.notifications.alert_notifier import forget_alerts, notify_alert
+from app.services.notifications.alert_notifier import (
+    ACTION_TYPES,
+    SummaryItem,
+    forget_alerts,
+    notify_alert,
+    notify_daily_summary,
+    summary_deadline_passed,
+    summary_due,
+)
 from app.services.position_alert_log import log_position_alert, prune_position_alert_history
 
 logger = logging.getLogger(__name__)
@@ -43,6 +53,52 @@ def _load_settings() -> dict:
 
 def _load_delivery_config() -> dict:
     return _load_settings().get('alert_delivery', {})
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _position_label(symbol: str, contract: str | None) -> str:
+    """'COP 100C 2026-12-18' for an option contract, else the symbol."""
+    parts = (contract or '').split('|')
+    if len(parts) == 4:
+        return f'{parts[0]} {parts[1]}{parts[3]} {parts[2]}'
+    return symbol
+
+
+async def _maybe_send_daily_summary(
+    now: datetime,
+    alerts: list[AlertItem],
+    episodes: dict,
+    unquoted: dict[str, str],
+    overrides_by_rec_id: dict[str, dict],
+    enabled_types: list[str],
+) -> None:
+    """Daily 09:00 Berlin summary (PORTFOLIO-ALERT-ACTION §2). The caller has
+    already established that generation succeeded this tick; ``unquoted`` maps
+    rec_id -> label for positions missing a stock or option quote. Before 12:00
+    Berlin any unquoted position defers the summary to a later tick."""
+    if not summary_due(now):
+        return
+    if unquoted and not summary_deadline_passed(now):
+        return
+    items: list[SummaryItem] = []
+    for alert in alerts:
+        if alert.alertType not in ACTION_TYPES or alert.recId in unquoted:
+            continue
+        override = effective_enabled(overrides_by_rec_id.get(alert.recId), alert.alertType)
+        enabled = override if override is not None else alert.alertType in enabled_types
+        if not enabled:
+            continue
+        view = episodes.get((alert.recId, alert.alertType))
+        items.append(SummaryItem(
+            rec_id=alert.recId, symbol=alert.symbol, alert_type=alert.alertType,
+            start=view.start if view is not None else None,
+            truncated=view.truncated if view is not None else False,
+            stop_side=alert.stopSide,
+        ))
+    await notify_daily_summary(items, now, unquoted=sorted(unquoted.values()))
 
 
 async def _run_once() -> None:
@@ -87,6 +143,10 @@ async def _run_once() -> None:
     # while the positions are already loaded below so the dispatch loop can
     # resolve `override ?? global` without a second query.
     overrides_by_rec_id: dict[str, dict] = {}
+    # Daily summary inputs: generation succeeded this tick (no exception), and
+    # which positions lacked a stock quote or (option) contract quote.
+    generation_ok = False
+    unquoted: dict[str, str] = {}
 
     # ── 1. Portfolio position alerts ─────────────────────────────────────────
     try:
@@ -123,8 +183,32 @@ async def _run_once() -> None:
                 alerts.extend(await generate_alerts(
                     db, current_prices, option_prices or None, position_sustain_minutes))
                 await db.commit()
+
+                for p in positions:
+                    is_option = bool(p.contract) and not str(p.contract).upper().endswith('|STOCK')
+                    if (current_prices.get(p.symbol) is None
+                            or (is_option and option_prices.get(p.contract) is None)):
+                        unquoted[p.rec_id] = _position_label(p.symbol, p.contract)
+            generation_ok = True
     except Exception:
         logger.error('Portfolio alert generation failed', exc_info=True)
+
+    # Current history episodes for this tick's position alerts, read in a new
+    # session after the generation commit (so this tick's rows count). A failed
+    # lookup leaves every alert without a start (the notifier then falls back
+    # to its own record, or to now for a brand-new one).
+    now = _utcnow()
+    episodes: dict = {}
+    episode_rec_ids = {a.recId for a in alerts if a.alertType in POSITION_ALERT_TYPES}
+    if episode_rec_ids:
+        try:
+            async with AsyncSessionLocal() as db:
+                episodes = await current_episodes(
+                    db, sorted(episode_rec_ids), now, POSITION_ALERT_TYPES,
+                    delivery_cfg=delivery)
+        except Exception:
+            logger.warning('Alert episode lookup failed', exc_info=True)
+            episodes = {}
 
     # Clear dedup entries for positions that have been closed/removed so a
     # future re-entry (new trade) can alert again.
@@ -182,17 +266,28 @@ async def _run_once() -> None:
         # so the only override left to honour here is an explicit True — which
         # must beat a globally-disabled type. `None` (no override) keeps
         # notify_alert on the global enabledTypes list, exactly as before.
+        view = episodes.get((alert.recId, alert.alertType))
         await notify_alert(alert.symbol, alert.alertType, alert.reason,
                      alert.recId, alert.timestamp,
                      type_enabled=effective_enabled(
                          overrides_by_rec_id.get(alert.recId), alert.alertType),
-                     stop_side=alert.stopSide)
+                     stop_side=alert.stopSide,
+                     episode_start=(EpisodeStart(view.start, view.truncated)
+                                    if view is not None else None))
 
         try:
             await alert_service.broadcast([alert.model_dump()])
         except Exception:
             logger.debug('WS broadcast failed for %s|%s',
                          alert.recId, alert.alertType, exc_info=True)
+
+    # ── 4. Daily summary (once per Berlin day from 09:00) ───────────────────
+    if generation_ok:
+        try:
+            await _maybe_send_daily_summary(
+                now, alerts, episodes, unquoted, overrides_by_rec_id, enabled_types)
+        except Exception:
+            logger.error('Daily alert summary failed', exc_info=True)
 
 
 def _check_interval_seconds() -> int:

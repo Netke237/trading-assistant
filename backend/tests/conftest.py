@@ -232,14 +232,23 @@ def _isolate_alert_dedup_state(tmp_path, monkeypatch):
     Both globals are reset on the way IN and on the way OUT: a test that leaves
     keys behind must not arm another test's dedup window, which is the same
     ordering-dependence `_reset_market_data_caches` below exists to prevent.
+
+    PORTFOLIO-ALERT-ACTION T2 added two more pieces of state to the same file:
+    the per-key `_episodes` map and the daily-summary day (`_summary_state`).
+    They are reset the same way, for the same reason -- a leaked episode record
+    or summary day would suppress another test's first fire or summary.
     """
     import app.services.notifications.alert_notifier as an
     monkeypatch.setattr(an, "_DEDUP_PATH", tmp_path / "alert_dedup.json")
     an._fired.clear()
     an._first_seen.clear()
+    an._episodes.clear()
+    an._summary_state.clear()
     yield
     an._fired.clear()
     an._first_seen.clear()
+    an._episodes.clear()
+    an._summary_state.clear()
 
 
 @pytest.fixture(autouse=True)

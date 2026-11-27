@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 import httpx
@@ -23,6 +24,8 @@ from app.services.alert_generator import POSITION_ALERT_TYPES, effective_enabled
 from app.services.notifications.alert_notifier import notify_alert
 from app.services.position_alert_log import log_position_alert
 from app.services.premium_stop import premium_stop_side
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api', tags=['alerts'])
 
@@ -258,9 +261,21 @@ async def post_alert_notify(
         if req.alertType == 'PREMIUM_STOP' and req.stopSide is not None
         else None
     )
+    # PORTFOLIO-ALERT-ACTION: the key's current history episode, read after the
+    # commit above so this fire's row counts. A failed lookup passes None (the
+    # notifier then falls back to its own record, or to now for a new one).
+    episode_start = None
+    if req.alertType in POSITION_ALERT_TYPES:
+        try:
+            episode_start = await alert_episodes.episode_start(
+                db, req.recId, req.alertType, datetime.now(timezone.utc))
+        except Exception:
+            logger.warning('Alert episode lookup failed for %s|%s',
+                           req.recId, req.alertType, exc_info=True)
     sent = await notify_alert(
         position.symbol, req.alertType, req.reason, req.recId, req.timestamp,
         type_enabled=effective_enabled(position.alert_overrides, req.alertType),
         stop_side=stop_side,
+        episode_start=episode_start,
     )
     return {'sent': sent}
