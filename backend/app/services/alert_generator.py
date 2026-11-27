@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.config_health import config_health
@@ -22,6 +23,8 @@ from app.services.premium_stop import (
 )
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+
+_log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -81,6 +84,29 @@ def effective_enabled(overrides: Optional[dict], alert_type: str) -> Optional[bo
         return None
     value = overrides.get(alert_type)
     return value if isinstance(value, bool) else None
+
+
+async def stamp_target_first_hit(db: AsyncSession, rec_id: str, now: datetime) -> None:
+    """Record the first time this open position's target was reached.
+
+    PORTFOLIO-ALERT-ACTION: a conditional UPDATE (`... WHERE
+    target_first_hit_at IS NULL`), so the first stamp is never overwritten,
+    not even by a concurrent writer that read the row before it was set. Run
+    inside a SAVEPOINT like log_position_alert: on failure only the savepoint
+    rolls back and alert generation carries on. Never commits; the caller owns
+    the commit, as for the history row written beside it.
+    """
+    try:
+        async with db.begin_nested():
+            await db.execute(
+                update(PortfolioPositionModel)
+                .where(PortfolioPositionModel.rec_id == rec_id,
+                       PortfolioPositionModel.target_first_hit_at.is_(None))
+                .values(target_first_hit_at=now)
+                .execution_options(synchronize_session=False)
+            )
+    except Exception:
+        _log.error("Failed to stamp target_first_hit_at for %s", rec_id, exc_info=True)
 
 
 def parse_expiry_from_contract(contract: str) -> Optional[date]:
@@ -207,6 +233,7 @@ async def generate_alerts(
                     source="backend", price=price, reference_value=target_stock_price,
                     reference_kind="price", direction=pos.direction, contract=pos.contract,
                 )
+                await stamp_target_first_hit(db, pos.rec_id, now)
                 # Only label a non-ladder method that actually supplied the
                 # price — a non-positive raw_resolved falsy/negative means it
                 # fell back to the ladder above (same `> 0` guard as line 177,

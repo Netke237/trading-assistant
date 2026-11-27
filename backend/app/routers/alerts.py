@@ -1,7 +1,9 @@
 import asyncio
+import logging
+from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,11 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.data.market import fetch_contract_quote_async, fetch_quotes
 from app.database import get_db
 from app.models.portfolio import PortfolioPositionModel
-from app.schemas import AlertItem
-from app.services.alert_generator import effective_enabled, generate_alerts
+from app.models.position_alert import PositionAlertHistoryModel
+from app.schemas import (
+    AlertEpisodeItem,
+    AlertEpisodesResponse,
+    AlertHistoryResponse,
+    AlertHistoryRow,
+    AlertItem,
+)
+from app.services import alert_episodes
+from app.services.alert_generator import (
+    POSITION_ALERT_TYPES,
+    effective_enabled,
+    generate_alerts,
+    stamp_target_first_hit,
+)
 from app.services.notifications.alert_notifier import notify_alert
 from app.services.position_alert_log import log_position_alert
 from app.services.premium_stop import premium_stop_side
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api', tags=['alerts'])
 
@@ -94,6 +111,94 @@ _REFERENCE_KIND_BY_TYPE = {
 }
 
 
+# ── Alert episodes / history (PORTFOLIO-ALERT-ACTION, #672) ─────────────────
+# Read-only: no writes, no flush, no commit.
+
+_HISTORY_ROW_CAP = 500
+
+
+def _iso_utc(dt: datetime | None) -> str | None:
+    return None if dt is None else alert_episodes.as_utc(dt).isoformat()
+
+
+def _episode_item(view: alert_episodes.EpisodeView, symbol: str) -> AlertEpisodeItem:
+    return AlertEpisodeItem(
+        recId=view.rec_id,
+        symbol=symbol,
+        alertType=view.alert_type,
+        startedAt=_iso_utc(view.start),
+        lastFiredAt=_iso_utc(view.last),
+        fireCount=view.count,
+        startTruncated=view.truncated,
+    )
+
+
+@router.get('/alerts/episodes', response_model=AlertEpisodesResponse)
+async def get_alert_episodes(db: AsyncSession = Depends(get_db)) -> AlertEpisodesResponse:
+    """Current episodes of the position alert types for OPEN positions only.
+
+    gapHours/retentionDays are the exact values the episodes were computed
+    with (one config read), so the UI never guesses them.
+    """
+    now = datetime.now(timezone.utc)
+    cfg = alert_episodes.load_delivery_config()
+    gap = alert_episodes.effective_gap(cfg)
+    positions = (await db.execute(
+        select(PortfolioPositionModel.rec_id, PortfolioPositionModel.symbol)
+    )).all()
+    symbol_by_rec = {rec_id: symbol for rec_id, symbol in positions}
+    current = await alert_episodes.current_episodes(
+        db, list(symbol_by_rec), now, POSITION_ALERT_TYPES, delivery_cfg=cfg,
+    )
+    views = sorted(current.values(), key=lambda v: (v.start, v.rec_id, v.alert_type))
+    return AlertEpisodesResponse(
+        gapHours=gap.total_seconds() / 3600,
+        retentionDays=alert_episodes.retention_days(cfg),
+        generatedAt=_iso_utc(now),
+        episodes=[_episode_item(v, symbol_by_rec[v.rec_id]) for v in views],
+    )
+
+
+@router.get('/alerts/history/{rec_id}', response_model=AlertHistoryResponse)
+async def get_alert_history(rec_id: str, db: AsyncSession = Depends(get_db)) -> AlertHistoryResponse:
+    """One open position's alert log (newest first, capped) and every episode
+    of every alert type for it (computed from all rows, not the capped page).
+    404 when rec_id is not an open position."""
+    position = (await db.execute(
+        select(PortfolioPositionModel.symbol).where(PortfolioPositionModel.rec_id == rec_id)
+    )).first()
+    if position is None:
+        raise HTTPException(status_code=404, detail='position_not_found')
+    symbol = position[0]
+
+    now = datetime.now(timezone.utc)
+    cfg = alert_episodes.load_delivery_config()
+    rows = (await db.execute(
+        select(PositionAlertHistoryModel)
+        .where(PositionAlertHistoryModel.rec_id == rec_id)
+        .order_by(PositionAlertHistoryModel.triggered_at.desc(), PositionAlertHistoryModel.id)
+        .limit(_HISTORY_ROW_CAP)
+    )).scalars().all()
+    episodes = await alert_episodes.all_episodes(db, rec_id, now, delivery_cfg=cfg)
+    return AlertHistoryResponse(
+        recId=rec_id,
+        symbol=symbol,
+        rows=[
+            AlertHistoryRow(
+                alertType=r.alert_type,
+                source=r.source,
+                price=r.price,
+                referenceValue=r.reference_value,
+                referenceKind=r.reference_kind,
+                note=r.note,
+                triggeredAt=_iso_utc(r.triggered_at),
+            )
+            for r in rows
+        ],
+        episodes=[_episode_item(v, symbol) for v in episodes],
+    )
+
+
 @router.post('/alerts/notify')
 async def post_alert_notify(
     req: AlertNotifyRequest,
@@ -143,6 +248,10 @@ async def post_alert_notify(
         contract=position.contract,
         note=req.note,
     )
+    # PORTFOLIO-ALERT-ACTION: the first TP_HIT stamps target_first_hit_at on
+    # this open position (never overwritten; see stamp_target_first_hit).
+    if req.alertType == 'TP_HIT':
+        await stamp_target_first_hit(db, req.recId, datetime.now(timezone.utc))
     # log_position_alert no longer commits the (shared, request-scoped) session
     # itself — see its docstring — so this endpoint owns the final commit.
     await db.commit()
@@ -161,9 +270,21 @@ async def post_alert_notify(
         if req.alertType == 'PREMIUM_STOP' and req.stopSide is not None
         else None
     )
+    # PORTFOLIO-ALERT-ACTION: the key's current history episode, read after the
+    # commit above so this fire's row counts. A failed lookup passes None (the
+    # notifier then falls back to its own record, or to now for a new one).
+    episode_start = None
+    if req.alertType in POSITION_ALERT_TYPES:
+        try:
+            episode_start = await alert_episodes.episode_start(
+                db, req.recId, req.alertType, datetime.now(timezone.utc))
+        except Exception:
+            logger.warning('Alert episode lookup failed for %s|%s',
+                           req.recId, req.alertType, exc_info=True)
     sent = await notify_alert(
         position.symbol, req.alertType, req.reason, req.recId, req.timestamp,
         type_enabled=effective_enabled(position.alert_overrides, req.alertType),
         stop_side=stop_side,
+        episode_start=episode_start,
     )
     return {'sent': sent}

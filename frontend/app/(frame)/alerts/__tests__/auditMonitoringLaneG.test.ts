@@ -5,7 +5,7 @@
  * 1. Watched contracts store: storage key, schema version 3, grading map, migration rule, and CRUD methods.
  * 2. Watchlist store: storage key, schema version 1, add/remove/isWatched operations.
  * 3. Auto-Trade store: storage key, partialize safety exclusion (unconditionally disarming on reload), atomic armed setter.
- * 4. Alert store separation: portfolio toasts (bamendjou-alerts-v2 v3) vs chart alert rules (bamendjou:alerts).
+ * 4. Alert store separation: portfolio toasts (bamendjou-alerts-v2 v4) vs chart alert rules (bamendjou:alerts).
  * 5. Chart alert indicator parsing and crossing operator math (crosses_above, crosses_below).
  */
 
@@ -124,10 +124,10 @@ describe('Lane G Frontend Audit: APP-AUDIT-MONITORING (#355)', () => {
   });
 
   describe('4. Alert Subsystem Store Separation', () => {
-    it('useAlertStore uses bamendjou-alerts-v2 with schema version 3', () => {
+    it('useAlertStore uses bamendjou-alerts-v2 with schema version 4', () => {
       expect(useAlertStore).toBeDefined();
       expect(useAlertStore.persist.getOptions().name).toBe('bamendjou-alerts-v2');
-      expect(useAlertStore.persist.getOptions().version).toBe(3);
+      expect(useAlertStore.persist.getOptions().version).toBe(4);
     });
 
     it('useChartAlertStore uses separate bamendjou:alerts store (version 2) for chart rules and history', () => {

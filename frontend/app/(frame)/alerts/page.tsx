@@ -447,7 +447,7 @@ export default function AlertsPage() {
                   }}
                 />
               </SettingsRow>
-              <SettingsRow label="Reminder interval (hours)" hint="While a condition stays true, how often email / Telegram reminds you." defaultValue="4">
+              <SettingsRow label="Reminder interval (hours)" hint="While a condition stays true, how often it is re-logged to alert history (and how often regime-change reminders are sent). Portfolio stop / target email and Telegram now remind once a day per active alert, plus a daily 09:00 summary." defaultValue="4">
                 <input
                   type="number"
                   className={styles.input}

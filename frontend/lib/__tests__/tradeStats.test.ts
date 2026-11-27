@@ -1,6 +1,6 @@
 import {
   classOf, holdDays, returnPct, exitCheck, computeTradeStats, filterTrades, sortTrades, tradeLabel,
-  stopPctFor,
+  stopPctFor, targetThenLoss,
 } from '../tradeStats';
 import type { ClosedPosition } from '../performanceStore';
 
@@ -347,5 +347,22 @@ describe('tradeLabel', () => {
   });
   it('unknown', () => {
     expect(tradeLabel(row({ symbol: 'NFLX', contract: 'weird' }))).toBe('NFLX');
+  });
+});
+
+describe('targetThenLoss (PORTFOLIO-ALERT-ACTION)', () => {
+  const HIT = '2026-10-20T14:30:00+00:00';
+  it('loss after the target was reached', () => {
+    expect(targetThenLoss(row({ targetFirstHitAt: HIT, realizedPnlDollar: -655 }))).toBe(true);
+  });
+  it('win after the target was reached', () => {
+    expect(targetThenLoss(row({ targetFirstHitAt: HIT, realizedPnlDollar: 360 }))).toBe(false);
+  });
+  it('zero P&L is not a loss', () => {
+    expect(targetThenLoss(row({ targetFirstHitAt: HIT, realizedPnlDollar: 0 }))).toBe(false);
+  });
+  it('null or absent stamp is never flagged', () => {
+    expect(targetThenLoss(row({ targetFirstHitAt: null, realizedPnlDollar: -655 }))).toBe(false);
+    expect(targetThenLoss(row({ realizedPnlDollar: -655 }))).toBe(false);
   });
 });

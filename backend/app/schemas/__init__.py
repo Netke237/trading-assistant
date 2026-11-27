@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.schemas.payload_depth import validate_payload_depth
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional, Union
 from pydantic import (
@@ -528,6 +528,46 @@ class AlertItem(BaseModel):
     # selects the notifier's dedup key, so a short's rise-side fire never
     # inherits dedup state written under the old fall-side rule.
     stopSide: Optional[str] = None
+
+
+# ── Alert episodes / history (PORTFOLIO-ALERT-ACTION, #672) ─────────────────
+# Read-only views over position_alert_history; see services/alert_episodes.py.
+# Every timestamp is an ISO-8601 UTC string WITH offset ("+00:00").
+
+class AlertEpisodeItem(BaseModel):
+    recId: str
+    symbol: str
+    alertType: str
+    startedAt: str
+    lastFiredAt: str
+    fireCount: int
+    # True → startedAt is only the earliest KNOWN fire (an earlier one may have
+    # been pruned): show "since before <date>" / "N+ days", never an exact count.
+    startTruncated: bool
+
+
+class AlertEpisodesResponse(BaseModel):
+    gapHours: float
+    retentionDays: int
+    generatedAt: str
+    episodes: list[AlertEpisodeItem]
+
+
+class AlertHistoryRow(BaseModel):
+    alertType: str
+    source: str
+    price: Optional[float] = None
+    referenceValue: Optional[float] = None
+    referenceKind: Optional[str] = None
+    note: Optional[str] = None
+    triggeredAt: Optional[str] = None
+
+
+class AlertHistoryResponse(BaseModel):
+    recId: str
+    symbol: str
+    rows: list[AlertHistoryRow]
+    episodes: list[AlertEpisodeItem]
 
 
 # ── Events ───────────────────────────────────────────────────────────────────
@@ -1566,6 +1606,15 @@ class ClosePositionRequest(BaseModel):
     exitReason: Optional[CloseExitReason] = None
 
 
+def _iso_utc_or_none(value: Optional[datetime]) -> Optional[str]:
+    """ISO 8601 with an explicit UTC offset; SQLite reads DateTime back naive (stored UTC)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 class ClosedPositionSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
     id: str
@@ -1587,6 +1636,9 @@ class ClosedPositionSchema(BaseModel):
     structuralStopAtClose: Optional[float] = None
     premiumStopPctAtClose: Optional[float] = None
     premiumStopPriceAtClose: Optional[float] = None
+    # PORTFOLIO-ALERT-ACTION: when the target was first reached (ISO 8601 UTC
+    # with offset); None = never reached or not recorded.
+    targetFirstHitAt: Optional[str] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "ClosedPositionSchema":
@@ -1609,6 +1661,7 @@ class ClosedPositionSchema(BaseModel):
             structuralStopAtClose=obj.structural_stop_at_close,
             premiumStopPctAtClose=obj.premium_stop_pct_at_close,
             premiumStopPriceAtClose=obj.premium_stop_price_at_close,
+            targetFirstHitAt=_iso_utc_or_none(getattr(obj, "target_first_hit_at", None)),
         )
 
 

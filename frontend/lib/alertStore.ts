@@ -1,12 +1,30 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ToastItem, AlertConfig, AlertType } from '@/types/domain';
+import { POSITION_ALERT_TYPES } from '@/types/domain';
+import { EPISODE_GAP_HOURS, REMINDER_PERIOD_HOURS } from '@/lib/alertEpisodes';
+
+/** One alert EPISODE of a position alert condition (PORTFOLIO-ALERT-ACTION,
+ *  plan §5): `startedAt` is the episode's first trigger (ISO), `lastSeenAt` the
+ *  last time the condition was reported true (epoch ms, moves even while the
+ *  key is acknowledged), `lastSurfacedAt` the last first-fire or daily
+ *  reminder (epoch ms). Keyed by `alertKey`. */
+export interface AlertEpisodeRecord {
+  startedAt: string;
+  lastSeenAt: number;
+  lastSurfacedAt: number;
+}
+
+const EPISODE_GAP_MS = EPISODE_GAP_HOURS * 3_600_000;
+const REMINDER_PERIOD_MS = REMINDER_PERIOD_HOURS * 3_600_000;
+const EPISODE_TYPES = new Set<string>(POSITION_ALERT_TYPES);
 
 export interface AlertStoreState {
   toasts: ToastItem[];
   config: AlertConfig;
   firedAlerts: Record<string, number>;
-  suppressedAlerts: Record<string, true>;  // permanent suppress after acknowledge
+  suppressedAlerts: Record<string, true>;  // suppress after acknowledge (position types: until the next daily reminder / new episode)
+  episodes: Record<string, AlertEpisodeRecord>;  // position types only, keyed by alertKey
 
   addToast: (item: Omit<ToastItem, 'id' | 'dismissed' | 'acknowledged' | 'firedAt'>) => void;
   dismissToast: (id: string) => void;
@@ -172,7 +190,17 @@ function playBeep(): void {
 // upgrades — see the ALERT_STORE_VERSION usage in `merge`) must pass this same
 // current value, never a hardcoded old one, or every hydration would re-run
 // the "was this version bump ever applied" check and always answer yes.
-const ALERT_STORE_VERSION = 3;
+// v4 (PORTFOLIO-ALERT-ACTION): adds the persisted `episodes` record.
+const ALERT_STORE_VERSION = 4;
+
+function isEpisodeRecord(value: unknown): value is AlertEpisodeRecord {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.startedAt === 'string'
+    && Number.isFinite(Date.parse(v.startedAt))
+    && typeof v.lastSeenAt === 'number' && Number.isFinite(v.lastSeenAt)
+    && typeof v.lastSurfacedAt === 'number' && Number.isFinite(v.lastSurfacedAt);
+}
 
 export function migrateAlerts(persistedState: unknown, _version: number): Partial<AlertStoreState> {
   const prev = (persistedState as Partial<AlertStoreState> | null) ?? {};
@@ -188,7 +216,9 @@ export function migrateAlerts(persistedState: unknown, _version: number): Partia
   // there's no way to tell "predates this feature" from "user turned it off"
   // from the list alone. A one-time migration avoids that fight: after this
   // runs, the type is present, and if the user unchecks it, it stays off.
-  if (_version < ALERT_STORE_VERSION && Array.isArray(config.enabledTypes) && !config.enabledTypes.includes('STRUCTURAL_STOP_BREACHED')) {
+  // Pinned to `< 3` (the version that introduced it), NOT the current
+  // version, so later bumps (v4: episodes) never re-run it.
+  if (_version < 3 && Array.isArray(config.enabledTypes) && !config.enabledTypes.includes('STRUCTURAL_STOP_BREACHED')) {
     config = { ...config, enabledTypes: [...config.enabledTypes, 'STRUCTURAL_STOP_BREACHED'] };
   }
   return {
@@ -209,6 +239,11 @@ export function migrateAlerts(persistedState: unknown, _version: number): Partia
     firedAlerts: isRecord(prev.firedAlerts)
       ? prev.firedAlerts as Record<string, number>
       : {},
+    // v4: tolerant per-entry check — a malformed entry is dropped (that key
+    // simply starts a fresh episode on its next fire), never the whole store.
+    episodes: isRecord(prev.episodes)
+      ? Object.fromEntries(Object.entries(prev.episodes).filter(([, v]) => isEpisodeRecord(v))) as Record<string, AlertEpisodeRecord>
+      : {},
   };
 }
 
@@ -219,15 +254,50 @@ export const useAlertStore = create<AlertStoreState>()(
       config: DEFAULT_CONFIG,
       firedAlerts: {},
       suppressedAlerts: {},
+      episodes: {},
 
       addToast: (item) => {
-        const { toasts, config, firedAlerts, suppressedAlerts } = get();
+        const { toasts, config, firedAlerts, episodes } = get();
+        let { suppressedAlerts } = get();
         const now = Date.now();
         const nowIso = new Date(now).toISOString();
 
         const compositeKey = alertKey(item);
 
-        // permanently suppressed after acknowledge
+        // ── Episodes (PORTFOLIO-ALERT-ACTION plan §5), position types only.
+        //    A condition is a NEW episode when it has no record or was last
+        //    seen more than EPISODE_GAP_HOURS ago; within an episode it
+        //    re-surfaces once per REMINDER_PERIOD_HOURS (daily reminder), even
+        //    after an acknowledgement. Scan lifecycle / regime types keep the
+        //    plain acknowledge-suppresses behaviour.
+        let episodeKind: 'new' | 'reminder' | 'same' | null = null;
+        let reminderFiredAt = nowIso;
+        if (EPISODE_TYPES.has(item.alertType)) {
+          const ep = episodes[compositeKey];
+          let nextEp: AlertEpisodeRecord;
+          if (!ep || now - ep.lastSeenAt > EPISODE_GAP_MS) {
+            episodeKind = 'new';
+            nextEp = { startedAt: nowIso, lastSeenAt: now, lastSurfacedAt: now };
+          } else if (now - ep.lastSurfacedAt >= REMINDER_PERIOD_MS) {
+            episodeKind = 'reminder';
+            reminderFiredAt = ep.startedAt;
+            nextEp = { ...ep, lastSeenAt: now, lastSurfacedAt: now };
+          } else {
+            episodeKind = 'same';
+            nextEp = { ...ep, lastSeenAt: now };
+          }
+          // lastSeenAt is written BEFORE the suppression check, so an
+          // acknowledged condition still keeps its episode alive.
+          set({ episodes: { ...episodes, [compositeKey]: nextEp } });
+          if ((episodeKind === 'new' || episodeKind === 'reminder') && suppressedAlerts[compositeKey]) {
+            suppressedAlerts = { ...suppressedAlerts };
+            delete suppressedAlerts[compositeKey];
+            set({ suppressedAlerts });
+          }
+        }
+
+        // suppressed after acknowledge (position types: until the next
+        // daily reminder or a new episode clears it above)
         if (suppressedAlerts[compositeKey]) return;
 
         // ── In-app: one row per active condition. A still-true condition that
@@ -237,6 +307,7 @@ export const useAlertStore = create<AlertStoreState>()(
           (t) => alertKey(t) === compositeKey && !t.acknowledged,
         );
         const isNewRow = existingIdx < 0;
+        const surfaces = episodeKind === 'new' || episodeKind === 'reminder';
 
         let nextToasts: ToastItem[];
         if (isNewRow) {
@@ -246,8 +317,21 @@ export const useAlertStore = create<AlertStoreState>()(
             id,
             dismissed: false,
             acknowledged: false,
-            firedAt: nowIso,
+            // A daily reminder's new row carries the episode's original
+            // trigger time (the existing in-place-refresh convention).
+            firedAt: episodeKind === 'reminder' ? reminderFiredAt : nowIso,
           }];
+        } else if (surfaces) {
+          // New episode: the row restarts at now. Daily reminder: the row
+          // keeps its firedAt and is brought back if it was dismissed.
+          nextToasts = [...toasts];
+          nextToasts[existingIdx] = {
+            ...nextToasts[existingIdx]!,
+            kind: item.kind,
+            reason: item.reason,
+            dismissed: false,
+            ...(episodeKind === 'new' ? { firedAt: nowIso } : {}),
+          };
         } else {
           // Still-true condition refreshing in place: keep the ORIGINAL firedAt
           // so the row (and the reminder notifications) reflect the first trigger.
@@ -260,10 +344,13 @@ export const useAlertStore = create<AlertStoreState>()(
         }
 
         // ── Notification: throttle re-POSTs to once per dedupWindowMinutes so we
-        //    don't hit the backend every 30s tick. The backend enforces the real
-        //    reminder gap (reminderIntervalHours), so a short throttle here is
-        //    enough — it just needs to re-POST soon after each reminder window
-        //    opens. dedupWindowMinutes (15m) ≪ reminderIntervalHours (4h).
+        //    don't hit the backend every 30s tick. Each POST is logged to the
+        //    backend's alert history (re-logged at most every
+        //    reminderIntervalHours); email/Telegram for position types follow
+        //    the backend's episode cadence (first fire + one reminder per
+        //    REMINDER_PERIOD_HOURS, alert_notifier / alert_episodes), so a short
+        //    throttle here is enough. This throttle is deliberately NOT tied to
+        //    the in-app episode logic above.
         const throttleMs = Math.max(config.dedupWindowMinutes, 1) * 60_000;
         const lastSent = firedAlerts[compositeKey];
         const shouldNotify = lastSent == null || now - lastSent >= throttleMs;
@@ -288,8 +375,9 @@ export const useAlertStore = create<AlertStoreState>()(
           });
         }
 
-        // Only chime on a genuinely new alert, not on silent in-place refreshes.
-        if (isNewRow && config.soundEnabled) {
+        // Only chime on a genuinely new alert (or a new episode / daily
+        // reminder), not on silent in-place refreshes.
+        if ((isNewRow || surfaces) && config.soundEnabled) {
           playBeep();
         }
       },
@@ -331,7 +419,7 @@ export const useAlertStore = create<AlertStoreState>()(
       },
 
       clearAll: () => {
-        set({ toasts: [], suppressedAlerts: {}, firedAlerts: {} });
+        set({ toasts: [], suppressedAlerts: {}, firedAlerts: {}, episodes: {} });
       },
 
       setConfig: (c) => {
@@ -354,6 +442,7 @@ export const useAlertStore = create<AlertStoreState>()(
         config: state.config,
         suppressedAlerts: state.suppressedAlerts,
         firedAlerts: state.firedAlerts,
+        episodes: state.episodes,
       }),
       merge: (persistedState, currentState) => {
         // merge() runs on every hydration, not just on a version bump — pass
@@ -369,6 +458,7 @@ export const useAlertStore = create<AlertStoreState>()(
           config: { ...DEFAULT_CONFIG, ...(ps.config ?? {}) },
           suppressedAlerts: ps.suppressedAlerts ?? {},
           firedAlerts: ps.firedAlerts ?? {},
+          episodes: ps.episodes ?? {},
         };
         // purge old alerts, then collapse any pre-existing duplicate pile-up
         const cutoff = Date.now() - merged.config.keepAlertsDays * 86_400_000;

@@ -344,9 +344,13 @@ class _DatabaseUrl:
 
 
 def test_migration_head_is_the_exit_record_revision():
+    """The single head descends from the exit-record revision (later
+    revisions, e.g. PORTFOLIO-ALERT-ACTION's target_first_hit_at, stack on it)."""
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(_alembic_config())
-    assert script.get_heads() == [_REVISION]
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert _REVISION in {rev.revision for rev in script.iterate_revisions(heads[0], "base")}
     assert script.get_revision(_REVISION).down_revision == _PREV_HEAD
 
 
@@ -368,7 +372,9 @@ def test_sqlite_upgrade_adds_null_columns_and_downgrade_keeps_the_row(tmp_path):
             for name in _NEW_COLUMNS:
                 _cid, _name, _type, notnull, default, _pk = cols[name]
                 assert notnull == 0 and default is None
-            assert set(cols) == {c.name for c in ClosedPositionModel.__table__.columns}
+            # Every model column except those added by later revisions.
+            assert set(cols) == ({c.name for c in ClosedPositionModel.__table__.columns}
+                                 - {"target_first_hit_at"})
             assert db.execute(f"SELECT {_OLD_COLS} FROM closed_positions").fetchone() == _OLD_ROW
             assert db.execute(
                 "SELECT exit_reason, stop_at_close, structural_stop_at_close, "

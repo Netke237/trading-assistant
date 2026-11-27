@@ -67,6 +67,12 @@ class PortfolioPositionModel(Base):
     # that were not server-prepared for one order; migration does not backfill.
     prepared_order = Column(JSON, nullable=True)
     order_attempt_id = Column(String, nullable=True, index=True)
+    # PORTFOLIO-ALERT-ACTION: when the target was first reached (the first
+    # TP_HIT fire, backend or browser). Server-only: stamped once, never
+    # overwritten, absent from the create/patch schemas; close_position copies
+    # it into the closed row for the History "Reached target, closed at a
+    # loss" flag.
+    target_first_hit_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
